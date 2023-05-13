@@ -2,5 +2,7 @@
 <project version="4">
   <component name="VcsDirectoryMappings">
     <mapping directory="$PROJECT_DIR$" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/yolov7" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/yolov7-segmentation" vcs="Git" />
   </component>
 </project>
