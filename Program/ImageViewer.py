@@ -1,6 +1,5 @@
-import sys
-import subprocess
-from PyQt5.QtCore import Qt, QTimer
+import sys, subprocess, os
+from PyQt5.QtCore import Qt, QTimer, QStandardPaths
 from PyQt5.QtGui import QPixmap
 from PyQt5.QtWidgets import QApplication, QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel, QFileDialog
 
@@ -56,9 +55,11 @@ class MyWindow(QWidget):
         self.file_path = ""
 
     def open_image(self):
+        default_dir = QStandardPaths.writableLocation(QStandardPaths.DownloadLocation)
         options = QFileDialog.Options()
-        options |= QFileDialog.DontUseNativeDialog
-        file_path, _ = QFileDialog.getOpenFileName(self, "Open Image", "", "Image Files (*.png *.jpg *.jpeg *.bmp)",
+        # options |= QFileDialog.DontUseNativeDialog
+        file_path, _ = QFileDialog.getOpenFileName(self, "Open Image", default_dir,
+                                                   "Image Files (*.png *.jpg *.jpeg *.bmp)",
                                                    options=options)
 
         if file_path:
@@ -70,9 +71,19 @@ class MyWindow(QWidget):
         if self.file_path:
             subprocess_command = f"python ../yolov7/detect.py --weights ../yolov7/yolov7.pt --conf 0.25 --img-size 640 --source  {self.file_path}"  # Replace with the actual subprocess command
             subprocess.run(subprocess_command, shell=True)
-            output_image_path = './runs/detect/exp/aardbei.png'  # Replace with the actual path to the generated image
-            pixmap = QPixmap(output_image_path)
-            self.image_label.setPixmap(pixmap.scaled(self.image_label.size(), Qt.KeepAspectRatio))
+
+            detect_dir = './runs/detect'
+            folders = sorted(os.listdir(detect_dir), key=lambda x: os.path.getmtime(os.path.join(detect_dir, x)),
+                             reverse=True)
+            newest_folder = folders[0]
+            images_dir = os.path.join(detect_dir, newest_folder)
+            image_files = sorted(os.listdir(images_dir))
+            if image_files:
+                first_image_path = os.path.join(images_dir, image_files[0])
+                pixmap = QPixmap(first_image_path)
+                self.image_label.setPixmap(pixmap.scaled(self.image_label.size(), Qt.KeepAspectRatio))
+            else:
+                print("No image found in the newest folder.")
         else:
             print("No image file selected.")
 
