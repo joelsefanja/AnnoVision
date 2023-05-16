@@ -1,6 +1,6 @@
 import sys
 from PyQt5.QtWidgets import QApplication, QMainWindow, QGraphicsView, QGraphicsScene, QGraphicsRectItem, QAction, QFileDialog
-from PyQt5.QtGui import QPixmap, QPainter, QPen, QColor
+from PyQt5.QtGui import QPixmap, QPainter, QPen, QColor, QFont, QBrush, QPalette
 from PyQt5.QtCore import Qt, QRectF
 
 class ImageDrawer(QMainWindow):
@@ -14,11 +14,7 @@ class ImageDrawer(QMainWindow):
         self.setCentralWidget(self.view)
 
         # Store the drawn rectangles
-        self.rectangles = []
-
-        # Set up the pen for drawing rectangles
-        self.pen = QPen(Qt.red)
-        self.pen.setWidth(2)
+        self.annotations = []
 
         # Create the menu actions
         open_action = QAction("Open Image", self)
@@ -46,19 +42,37 @@ class ImageDrawer(QMainWindow):
         if event.button() == Qt.LeftButton and self.image:
             self.start_point = event.pos()
 
+        if event.button() == Qt.RightButton and self.image:
+            print("testsetsetset")
+            for rectangle in self.annotations:
+                self.scene.removeItem(rectangle.rect)
+                self.scene.removeItem(rectangle.text)
+
     def mouse_release_event(self, event):
         if event.button() == Qt.LeftButton and self.image:
             end_point = event.pos()
-            rect = self.create_rectangle(self.start_point, end_point)
-            self.rectangles.append(rect)
-            self.scene.addItem(rect)
+            anno = Annotation(self.start_point, end_point)
+            self.annotations.append(anno)
+            self.scene.addItem(anno.rect)
+            self.scene.addItem(anno.text)
 
-    def create_rectangle(self, start_point, end_point):
-        rect = QGraphicsRectItem()
-        rect.setPen(self.pen)
-        rect.setRect(QRectF(start_point, end_point))
-        return rect
 
+
+class Annotation():
+    def __init__(self, start_point, end_point):
+        self.rect = QGraphicsRectItem()
+
+        self.pen = QPen(Qt.red)
+        self.pen.setWidth(2)
+        self.rect.setPen(self.pen)
+
+        self.rect.setRect(QRectF(start_point, end_point))
+
+        self.scene = QGraphicsScene()
+        self.scene.addText("Label")
+        self.text = self.scene.items()[0]
+        self.text.setPos(start_point.x() - 5, start_point.y()-16)
+        self.text.setHtml("<div style='color: white; background-color: red;'>Label</div>")
 
 if __name__ == '__main__':
     app = QApplication(sys.argv)
