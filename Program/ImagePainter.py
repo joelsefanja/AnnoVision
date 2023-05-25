@@ -1,5 +1,5 @@
 import sys
-from PyQt5.QtWidgets import QApplication, QMainWindow, QGraphicsView, QGraphicsScene, QGraphicsRectItem, QAction, QFileDialog
+from PyQt5.QtWidgets import QApplication, QMainWindow, QGraphicsView, QGraphicsScene, QGraphicsRectItem, QAction, QFileDialog, QPushButton
 from PyQt5.QtGui import QPixmap, QPainter, QPen, QColor, QFont, QBrush, QPalette, QCursor
 from PyQt5.QtCore import Qt, QRectF, QTimer, QPoint
 
@@ -12,6 +12,10 @@ class ImageDrawer(QMainWindow):
         self.scene = QGraphicsScene()
         self.view.setScene(self.scene)
         self.setCentralWidget(self.view)
+
+        # Set window properties
+        self.setWindowState(Qt.WindowMaximized)
+        self.setWindowTitle("Full Screen Example")
 
         # Store the drawn rectangles
         self.annotations = []
