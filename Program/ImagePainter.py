@@ -1,4 +1,4 @@
-import sys
+import sys, threading
 from PyQt5.QtWidgets import QApplication, QMainWindow, QGraphicsView, QGraphicsScene, QGraphicsRectItem, QAction, QFileDialog, QPushButton
 from PyQt5.QtGui import QPixmap, QPainter, QPen, QColor, QFont, QBrush, QPalette, QCursor
 from PyQt5.QtCore import Qt, QRectF, QTimer, QPoint
@@ -38,6 +38,19 @@ class ImageDrawer(QMainWindow):
         self.timer = QTimer()
         self.timer.timeout.connect(self.drawing_annotation)
 
+
+        # Create the buttons
+        button1 = QPushButton("Button 1", self)
+        button2 = QPushButton("Button 2", self)
+        button3 = QPushButton("Button 3", self)
+
+        # Add the buttons to the toolbar
+        toolbar = self.addToolBar("Buttons")
+        toolbar.addWidget(button1)
+        toolbar.addWidget(button2)
+        toolbar.addWidget(button3)
+
+
     def open_image(self):
         options = QFileDialog.Options()
         file_path, _ = QFileDialog.getOpenFileName(self, "Open Image", "", "Image Files (*.png *.jpg *.jpeg *.bmp *.gif)", options=options)
@@ -68,6 +81,7 @@ class ImageDrawer(QMainWindow):
         if event.button() == Qt.LeftButton and self.image:
             self.timer.stop()
 
+            end_point = self.centralWidget().mapFromGlobal(QCursor.pos())
             end_point = self.centralWidget().mapFromGlobal(QCursor.pos())
             self.currentAnnotation.finalize(end_point)
 
