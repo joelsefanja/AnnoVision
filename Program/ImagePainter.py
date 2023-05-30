@@ -1,5 +1,5 @@
-import sys, threading
-from PyQt5.QtWidgets import QApplication, QMainWindow, QGraphicsView, QGraphicsScene, QGraphicsRectItem, QAction, QFileDialog, QPushButton
+import sys, threading, math
+from PyQt5.QtWidgets import QApplication, QMainWindow, QGraphicsView, QGraphicsScene, QGraphicsRectItem, QAction, QFileDialog, QPushButton, QWidget
 from PyQt5.QtGui import QPixmap, QPainter, QPen, QColor, QFont, QBrush, QPalette, QCursor
 from PyQt5.QtCore import Qt, QRectF, QTimer, QPoint
 
@@ -12,6 +12,7 @@ class ImageDrawer(QMainWindow):
         self.scene = QGraphicsScene()
         self.view.setScene(self.scene)
         self.setCentralWidget(self.view)
+        self.image = None
 
         # Set window properties
         self.setWindowState(Qt.WindowMaximized)
@@ -31,8 +32,8 @@ class ImageDrawer(QMainWindow):
         file_menu.addAction(open_action)
 
         # Connect the mouse events
-        self.view.mousePressEvent = self.mouse_press_event
-        self.view.mouseReleaseEvent = self.mouse_release_event
+        self.scene.mousePressEvent = self.mouse_press_event
+        self.scene.mouseReleaseEvent = self.mouse_release_event
 
         # Timers
         self.timer = QTimer()
@@ -62,7 +63,10 @@ class ImageDrawer(QMainWindow):
 
     def mouse_press_event(self, event):
         if event.button() == Qt.LeftButton and self.image:
-            start_point = event.pos()
+            start_point = self.centralWidget().mapFromGlobal(QCursor.pos())
+            start_point.setX(round(start_point.x() - (self.centralWidget().width() - self.image.width()) / 2))
+            start_point.setY(round(start_point.y() - (self.centralWidget().height() - self.image.height()) / 2))
+
             self.currentAnnotation = Annotation(start_point)
             self.drawing_annotation()
             self.timer.start(16)
@@ -82,7 +86,8 @@ class ImageDrawer(QMainWindow):
             self.timer.stop()
 
             end_point = self.centralWidget().mapFromGlobal(QCursor.pos())
-            end_point = self.centralWidget().mapFromGlobal(QCursor.pos())
+            end_point.setX(round(end_point.x() - (self.centralWidget().width() - self.image.width()) / 2))
+            end_point.setY(round(end_point.y() - (self.centralWidget().height() - self.image.height()) / 2))
             self.currentAnnotation.finalize(end_point)
 
             self.annotations.append(self.currentAnnotation)
@@ -91,6 +96,8 @@ class ImageDrawer(QMainWindow):
 
     def drawing_annotation(self):
         end_point = self.centralWidget().mapFromGlobal(QCursor.pos())
+        end_point.setX(round(end_point.x() - (self.centralWidget().width() - self.image.width()) / 2))
+        end_point.setY(round(end_point.y() - (self.centralWidget().height() - self.image.height()) / 2))
         self.currentAnnotation.draw(end_point)
         self.scene.addItem(self.currentAnnotation.rect)
 
