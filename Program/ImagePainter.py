@@ -1,4 +1,4 @@
-import sys, threading, math, os, cv2
+import sys, threading, math, os, cv2, subprocess
 from PyQt5.QtWidgets import QApplication, QMainWindow, QGraphicsView, QGraphicsScene, QGraphicsRectItem, QAction, \
     QFileDialog, QPushButton, QWidget, QLabel, QLineEdit, QTextEdit
 from PyQt5.QtGui import QPixmap, QPainter, QPen, QColor, QFont, QBrush, QPalette, QCursor, QIcon
@@ -18,6 +18,11 @@ class ImageDrawer(QMainWindow):
         self.image = None
         self.line_label = None
         self.action = 0 # 0 select   1 create   2 edit   3 delete
+        self.file_path = None
+
+        self.folder_dir = None
+        self.folder_images = None
+        self.folder_current_image_index = None
 
         # Set window properties
         self.setWindowState(Qt.WindowMaximized)
@@ -71,12 +76,24 @@ class ImageDrawer(QMainWindow):
         button4.setIcon(QIcon('delete.png'))
         button4.clicked.connect(self.action_delete)
 
+        button5 = QPushButton("Auto annotate", self)
+        button5.clicked.connect(self.run_auto_annotate)
+
+        button6 = QPushButton("Previous image", self)
+        button6.clicked.connect(self.previous_image)
+
+        button7 = QPushButton("Next image", self)
+        button7.clicked.connect(self.next_image)
+
         # Add the buttons to the toolbar
         toolbar = self.addToolBar("Buttons")
         toolbar.addWidget(button1)
         toolbar.addWidget(button2)
         toolbar.addWidget(button3)
         toolbar.addWidget(button4)
+        toolbar.addWidget(button5)
+        toolbar.addWidget(button6)
+        toolbar.addWidget(button7)
 
         # Create an empty label for the image
         self.image_label = QLabel()
@@ -88,11 +105,14 @@ class ImageDrawer(QMainWindow):
     def open_image(self):
         options = QFileDialog.Options()
         file_path, _ = QFileDialog.getOpenFileName(self, "Open Image", "", "Image Files (*.png *.jpg *.jpeg *.bmp *.gif)", options=options)
-        if file_path:
+        if file_path != None:
             # Load the selected image
+            self.file_path = file_path
             self.image = QPixmap(file_path)
             self.scene.clear()
             self.scene.addPixmap(self.image)
+
+            self.read_labels(file_path)
 
     def open_folder(self):
         default_dir = '/path/to/default/directory'
@@ -101,19 +121,55 @@ class ImageDrawer(QMainWindow):
         selected_dir = QFileDialog.getExistingDirectory(window, "Select Directory", default_dir, options=options)
 
         if selected_dir:
-            selected_folder = selected_dir
-            images_dir = os.path.join(selected_folder)
-            image_files = sorted(os.listdir(images_dir))
-            labels_dir = os.path.join(selected_folder, 'labels')
-            labels_files = sorted(os.listdir(labels_dir))
-            first_image_path = os.path.join(images_dir, image_files[1])
-            first_label_path = os.path.join(labels_dir, labels_files[0])
-            image_dir = first_image_path
-            label_dir = first_label_path
+            self.folder_dir = selected_dir
+            self.folder_images = sorted(os.listdir(selected_dir))
+            self.folder_images.pop(0)
+            self.folder_current_image_index = 0
+
+            first_image_path = os.path.join(selected_dir, self.folder_images[self.folder_current_image_index])
+
             self.image = QPixmap(first_image_path)
             self.scene.clear()
             self.scene.addPixmap(self.image)
-            self.read_labels(images_dir, image_dir, label_dir)
+            self.read_labels(first_image_path)
+
+    def read_labels(self, image_path):
+        image_dir = os.path.abspath(os.path.join(os.path.abspath(image_path), os.pardir))
+        if image_path.endswith('.jpg') or image_path.endswith('.png') or image_path.endswith('.jpeg'):
+            # Clear the list if another image is opened
+            if len(self.preExistingAnnotations) > 0:
+                self.preExistingAnnotations.clear()
+
+            if (os.path.exists(os.path.abspath(os.path.join(image_dir, "labels", os.path.splitext(os.path.basename(image_path))[0] + ".txt")))):
+                label_path = os.path.abspath(os.path.join(image_dir, "labels", os.path.splitext(os.path.basename(image_path))[0] + ".txt"))
+
+                # Read the labels from the file
+                with open(label_path, 'r') as f:
+                    lines = f.readlines()
+
+                # Process each line in the label file
+                for line in lines:
+                    line = line.strip().split()
+                    class_id = int(line[0])
+                    x, y, w, h = map(float, line[1:5])
+                    class_name = 'test'  # names[class_id]  # assuming you have loaded the class names
+                    color = 1  # colors[class_id]  # assuming you have loaded the colors
+                    self.preExistingAnnotations.append([class_id, class_name, color, x, y, w, h])
+
+                for annotation in self.preExistingAnnotations:
+                    img_h = int(self.image.height())
+                    img_w = int(self.image.width())
+                    x1 = int((annotation[3] - annotation[5] / 2) * img_w)
+                    y1 = int((annotation[4] - annotation[6] / 2) * img_h)
+                    x2 = int((annotation[3] + annotation[5] / 2) * img_w)
+                    y2 = int((annotation[4] + annotation[6] / 2) * img_h)
+
+                    # Draw the bounding box on the image
+                    self.currentAnnotation = Annotation(QPoint(x1, y1), QPoint(x2, y2))
+
+                    self.annotations.append(self.currentAnnotation)
+                    self.scene.addItem(self.currentAnnotation.rect)
+                    self.scene.addItem(self.currentAnnotation.text)
 
     def mouse_press_event(self, event):
         if event.button() == Qt.LeftButton and self.image and event.type() == event.GraphicsSceneMousePress:
@@ -207,6 +263,26 @@ class ImageDrawer(QMainWindow):
             self.scene.removeItem(anno.text)
             self.currentAnnotation = None
 
+    def previous_image(self):
+        self.folder_current_image_index -= 1
+        if (self.folder_current_image_index < 0): self.folder_current_image_index = len(self.folder_images) - 1
+
+        image_path = os.path.join(self.folder_dir, self.folder_images[self.folder_current_image_index])
+        self.image = QPixmap(image_path)
+        self.scene.clear()
+        self.scene.addPixmap(self.image)
+        self.read_labels(image_path)
+
+    def next_image(self):
+        self.folder_current_image_index += 1
+        if (self.folder_current_image_index > len(self.folder_images) - 1): self.folder_current_image_index = 0
+
+        image_path = os.path.join(self.folder_dir, self.folder_images[self.folder_current_image_index])
+        self.image = QPixmap(image_path)
+        self.scene.clear()
+        self.scene.addPixmap(self.image)
+        self.read_labels(image_path)
+
     def close_line_label(self):
         if (self.line_label != None and self.currentAnnotation != None):
             self.currentAnnotation.label = self.line_label.text()
@@ -219,61 +295,19 @@ class ImageDrawer(QMainWindow):
         self.currentAnnotation.draw()
         self.scene.addItem(self.currentAnnotation.rect)
 
-    # Reads the COCO text file and put it into coordinates
-    def read_labels(self, images_dir, image_dir, label_dir):
-        # Iterate over the images in the directory
-        for image_file in os.listdir(images_dir):
-            if image_file.endswith('.jpg') or image_file.endswith('.png') or image_file.endswith('.jpeg'):
-
-                # Clear the list if another image is opened
-                if len(self.preExistingAnnotations) > 0:
-                    self.preExistingAnnotations.clear()
-
-                # Load the image
-                image = cv2.imread(image_dir)
-
-                # Read the labels from the file
-                with open(label_dir, 'r') as f:
-                    lines = f.readlines()
-
-                # Process each line in the label file
-                for line in lines:
-                    line = line.strip().split()
-                    class_id = int(line[0])
-                    x, y, w, h = map(float, line[1:5])
-                    class_name = 'test'  # names[class_id]  # assuming you have loaded the class names
-                    color = 1  # colors[class_id]  # assuming you have loaded the colors
-                    self.preExistingAnnotations.append([class_id, class_name, color, x, y, w, h])
-        for annotation in self.preExistingAnnotations:
-            img_h, img_w, _ = image.shape
-            x1 = int((annotation[3] - annotation[5] / 2) * img_w)
-            y1 = int((annotation[4] - annotation[6] / 2) * img_h)
-            x2 = int((annotation[3] + annotation[5] / 2) * img_w)
-            y2 = int((annotation[4] + annotation[6] / 2) * img_h)
-
-            # Draw the bounding box on the image
-            self.currentAnnotation = Annotation(QPoint(x1, y1), QPoint(x2, y2))
-
-            self.annotations.append(self.currentAnnotation)
-            self.scene.addItem(self.currentAnnotation.rect)
-            self.scene.addItem(self.currentAnnotation.text)
-
-    # def write_labels(self, List):
-    #     if len(self.preExistingAnnotations) > 0:
-    #         for annotation in List:
-    #         # [0, 'test', 1, 0.84, 0.577667, 0.0906667, 0.146]
-    #             self.rect.setRect(QRectF(annotation[3], annotation[5]))
-    #             self.text.setPos(annotation[3].x() - 5, annotation[4].y() - 16)
-    #             self.text.setHtml("<div style='color: white; background-color: red;'>Label</div>")
-    #     else:
-    #         print("List was empty")
+    def run_auto_annotate(self):
+        if self.file_path != None:
+            subprocess_command = f"python ../yolov7/detect.py --weights ../yolov7/yolov7-tiny.pt --conf 0.25 --nosave --save-txt --source {self.file_path}"  # Replace with the actual subprocess command
+            subprocess.run(subprocess_command, shell=True)
+        else:
+            print("No image file selected.")
 
 
 class Annotation():
     def __init__(self, start_point, end_point=None, label="Label"):
         self.rect = QGraphicsRectItem()
         self.start_point = start_point
-        self.end_point = None
+        self.end_point = end_point
         self.width = None
         self.height = None
         self.label = label
