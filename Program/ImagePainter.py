@@ -76,7 +76,8 @@ class ImageDrawer(QMainWindow):
         button4.setIcon(QIcon('delete.png'))
         button4.clicked.connect(self.action_delete)
 
-        button5 = QPushButton("Auto annotate", self)
+        button5 = QPushButton("Predict", self)
+        button5.setIcon(QIcon('predict.png'))
         button5.clicked.connect(self.run_auto_annotate)
 
         button6 = QPushButton("Previous image", self)
@@ -109,6 +110,18 @@ class ImageDrawer(QMainWindow):
             # Load the selected image
             self.file_path = file_path
             self.image = QPixmap(file_path)
+
+            # Calculate the new size based on the screen geometry and desired size reduction
+            screen_geometry = QApplication.desktop().availableGeometry()
+            screen_width = screen_geometry.width()
+            screen_height = screen_geometry.height()
+            desired_width = int(screen_width * 0.9)
+            desired_height = int(screen_height * 0.9)
+
+            # Resize the image to fit the new size while maintaining aspect ratio
+            self.image = self.image.scaled(desired_width, desired_height, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+
+            # Clear the scene and add the resized image
             self.scene.clear()
             self.scene.addPixmap(self.image)
 
@@ -205,12 +218,12 @@ class ImageDrawer(QMainWindow):
 
     def mouse_release_event(self, event):
         if event.button() == Qt.LeftButton and self.image:
-            if (self.action == 1):
+            if self.action == 1:
                 self.timer.stop()
 
-                end_point = self.centralWidget().mapFromGlobal(QCursor.pos())
-                end_point.setX(round(end_point.x() - (self.centralWidget().width() - self.image.width()) / 2))
-                end_point.setY(round(end_point.y() - (self.centralWidget().height() - self.image.height()) / 2))
+                end_point = event.scenePos()
+                end_point.setX(round(end_point.x() - self.image.width() / 2))
+                end_point.setY(round(end_point.y() - self.image.height() / 2))
                 self.currentAnnotation.finalize()
 
                 self.annotations.append(self.currentAnnotation)
@@ -218,22 +231,22 @@ class ImageDrawer(QMainWindow):
                 self.scene.addItem(self.currentAnnotation.text)
 
     def key_press_event(self, event):
-        if (event.key() == Qt.Key_S):
+        if event.key() == Qt.Key_S and event.modifiers() == Qt.ControlModifier:
             self.action = 0
-        if (event.key() == Qt.Key_C):
+        if event.key() == Qt.Key_C and event.modifiers() == Qt.ControlModifier:
             self.action = 1
-        if (event.key() == Qt.Key_E):
+        if event.key() == Qt.Key_E and event.modifiers() == Qt.ControlModifier:
             self.action = 2
-            if (self.currentAnnotation != None and self.line_label == None):
+            if self.currentAnnotation is not None and self.line_label is None:
                 self.line_label = QLineEdit(self)
                 self.line_label.move(int(self.width() / 2), int(self.height() / 2))
                 self.line_label.resize(80, 20)
                 self.line_label.setPlaceholderText(self.currentAnnotation.label)
                 self.line_label.editingFinished.connect(self.close_line_label)
                 self.line_label.show()
-        if (event.key() == Qt.Key_D):
+        if event.key() == Qt.Key_D and event.modifiers() == Qt.ControlModifier:
             self.action = 3
-            if (self.currentAnnotation != None):
+            if self.currentAnnotation is not None:
                 anno = self.annotations.pop(self.annotations.index(self.currentAnnotation))
                 self.scene.removeItem(anno.rect)
                 self.scene.removeItem(anno.text)
