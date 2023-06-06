@@ -71,7 +71,7 @@ class MyWindow(QWidget):
 
     def run_subprocess_command(self):
         if self.file_path:
-            subprocess_command = f"python ../yolov7/detect.py --weights ../yolov7/yolov7-tiny.pt --conf 0.25 --img-size 640 --source  {self.file_path}"  # Replace with the actual subprocess command
+            subprocess_command = f"python ../yolov7/detect.py --weights ../yolov7/yolov7-tiny.pt --conf 0.25 --img-size 640 --source  {self.file_path} --save-txt"  # Replace with the actual subprocess command
             subprocess.run(subprocess_command, shell=True)
 
             detect_dir = './runs/detect'

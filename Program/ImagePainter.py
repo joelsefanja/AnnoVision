@@ -1,3 +1,4 @@
+import subprocess
 import sys, threading, math, os, cv2
 from PyQt5.QtWidgets import QApplication, QMainWindow, QGraphicsView, QGraphicsScene, QGraphicsRectItem, QAction, \
     QFileDialog, QPushButton, QWidget, QLabel, QLineEdit, QTextEdit
@@ -7,6 +8,8 @@ from PyQt5.QtCore import Qt, QRectF, QTimer, QPoint, QRect
 global window
 
 class ImageDrawer(QMainWindow):
+    file_path = ""
+
     def __init__(self):
         super().__init__()
 
@@ -71,12 +74,17 @@ class ImageDrawer(QMainWindow):
         button4.setIcon(QIcon('delete.png'))
         button4.clicked.connect(self.action_delete)
 
+        button5 = QPushButton("Predict", self)
+        button5.setIcon(QIcon('predict.png'))
+        button5.clicked.connect(self.action_predict)
+
         # Add the buttons to the toolbar
         toolbar = self.addToolBar("Buttons")
         toolbar.addWidget(button1)
         toolbar.addWidget(button2)
         toolbar.addWidget(button3)
         toolbar.addWidget(button4)
+        toolbar.addWidget(button5)
 
         # Create an empty label for the image
         self.image_label = QLabel()
@@ -84,15 +92,28 @@ class ImageDrawer(QMainWindow):
         self.image_label.setMinimumSize(400, 400)
         self.image_label.setStyleSheet("background-color: white; border: none;")
 
-
     def open_image(self):
         options = QFileDialog.Options()
-        file_path, _ = QFileDialog.getOpenFileName(self, "Open Image", "", "Image Files (*.png *.jpg *.jpeg *.bmp *.gif)", options=options)
+        file_path, _ = QFileDialog.getOpenFileName(self, "Open Image", "",
+                                                   "Image Files (*.png *.jpg *.jpeg *.bmp *.gif)", options=options)
         if file_path:
             # Load the selected image
             self.image = QPixmap(file_path)
+
+            # Calculate the new size based on the screen geometry and desired size reduction
+            screen_geometry = QApplication.desktop().availableGeometry()
+            screen_width = screen_geometry.width()
+            screen_height = screen_geometry.height()
+            desired_width = int(screen_width * 0.9)
+            desired_height = int(screen_height * 0.9)
+
+            # Resize the image to fit the new size while maintaining aspect ratio
+            self.image = self.image.scaled(desired_width, desired_height, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+
+            # Clear the scene and add the resized image
             self.scene.clear()
             self.scene.addPixmap(self.image)
+
 
     def open_folder(self):
         default_dir = '/path/to/default/directory'
@@ -149,12 +170,12 @@ class ImageDrawer(QMainWindow):
 
     def mouse_release_event(self, event):
         if event.button() == Qt.LeftButton and self.image:
-            if (self.action == 1):
+            if self.action == 1:
                 self.timer.stop()
 
-                end_point = self.centralWidget().mapFromGlobal(QCursor.pos())
-                end_point.setX(round(end_point.x() - (self.centralWidget().width() - self.image.width()) / 2))
-                end_point.setY(round(end_point.y() - (self.centralWidget().height() - self.image.height()) / 2))
+                end_point = event.scenePos()
+                end_point.setX(round(end_point.x() - self.image.width() / 2))
+                end_point.setY(round(end_point.y() - self.image.height() / 2))
                 self.currentAnnotation.finalize()
 
                 self.annotations.append(self.currentAnnotation)
@@ -162,26 +183,27 @@ class ImageDrawer(QMainWindow):
                 self.scene.addItem(self.currentAnnotation.text)
 
     def key_press_event(self, event):
-        if (event.key() == Qt.Key_S):
+        if event.key() == Qt.Key_S and event.modifiers() == Qt.ControlModifier:
             self.action = 0
-        if (event.key() == Qt.Key_C):
+        if event.key() == Qt.Key_C and event.modifiers() == Qt.ControlModifier:
             self.action = 1
-        if (event.key() == Qt.Key_E):
+        if event.key() == Qt.Key_E and event.modifiers() == Qt.ControlModifier:
             self.action = 2
-            if (self.currentAnnotation != None and self.line_label == None):
+            if self.currentAnnotation is not None and self.line_label is None:
                 self.line_label = QLineEdit(self)
                 self.line_label.move(int(self.width() / 2), int(self.height() / 2))
                 self.line_label.resize(80, 20)
                 self.line_label.setPlaceholderText(self.currentAnnotation.label)
                 self.line_label.editingFinished.connect(self.close_line_label)
                 self.line_label.show()
-        if (event.key() == Qt.Key_D):
+        if event.key() == Qt.Key_D and event.modifiers() == Qt.ControlModifier:
             self.action = 3
-            if (self.currentAnnotation != None):
+            if self.currentAnnotation is not None:
                 anno = self.annotations.pop(self.annotations.index(self.currentAnnotation))
                 self.scene.removeItem(anno.rect)
                 self.scene.removeItem(anno.text)
                 self.currentAnnotation = None
+
 
     def action_select(self):
         self.action = 0
@@ -206,6 +228,28 @@ class ImageDrawer(QMainWindow):
             self.scene.removeItem(anno.rect)
             self.scene.removeItem(anno.text)
             self.currentAnnotation = None
+
+    def action_predict(self):
+
+
+        if self.file_path:
+            subprocess_command = f"python ../yolov7/detect.py --weights ../yolov7/yolov7-tiny.pt --conf 0.25 --img-size 640 --source {self.file_path}"  # Replace with the actual subprocess command
+            subprocess.run(subprocess_command, shell=True)
+
+            detect_dir = './runs/detect'
+            folders = sorted(os.listdir(detect_dir), key=lambda x: os.path.getmtime(os.path.join(detect_dir, x)),
+                             reverse=True)
+            newest_folder = folders[0]
+            images_dir = os.path.join(detect_dir, newest_folder)
+            image_files = sorted(os.listdir(images_dir))
+            if image_files:
+                first_image_path = os.path.join(images_dir, image_files[0])
+                pixmap = QPixmap(first_image_path)
+                self.image_label.setPixmap(pixmap.scaled(self.image_label.size(), Qt.KeepAspectRatio))
+            else:
+                print("No image found in the newest folder.")
+        else:
+            print("No image file selected.")
 
     def close_line_label(self):
         if (self.line_label != None and self.currentAnnotation != None):
@@ -358,6 +402,25 @@ class Annotation():
         self.text.setPos(self.start_point.x() - 5, self.start_point.y() - 16)
         self.text.setHtml(f"<div style='color: white; background-color: red;'>{self.label}</div>")
 
+    def run_subprocess_command(self):
+        if self.file_path:
+            subprocess_command = f"python ../yolov7/detect.py --weights ../yolov7/yolov7-tiny.pt --conf 0.25 --img-size 640 --source  {self.file_path}"  # Replace with the actual subprocess command
+            subprocess.run(subprocess_command, shell=True)
+
+            detect_dir = './runs/detect'
+            folders = sorted(os.listdir(detect_dir), key=lambda x: os.path.getmtime(os.path.join(detect_dir, x)),
+                             reverse=True)
+            newest_folder = folders[0]
+            images_dir = os.path.join(detect_dir, newest_folder)
+            image_files = sorted(os.listdir(images_dir))
+            if image_files:
+                first_image_path = os.path.join(images_dir, image_files[0])
+                pixmap = QPixmap(first_image_path)
+                self.image_label.setPixmap(pixmap.scaled(self.image_label.size(), Qt.KeepAspectRatio))
+            else:
+                print("No image found in the newest folder.")
+        else:
+            print("No image file selected.")
 
 if __name__ == '__main__':
     app = QApplication(sys.argv)
