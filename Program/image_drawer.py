@@ -1,112 +1,110 @@
-import sys, threading, math, os, cv2, subprocess
-from PyQt5.QtWidgets import QApplication, QMainWindow, QGraphicsView, QGraphicsScene, QGraphicsRectItem, QAction, \
-    QFileDialog, QPushButton, QWidget, QLabel, QLineEdit, QTextEdit
-from PyQt5.QtGui import QPixmap, QPainter, QPen, QColor, QFont, QBrush, QPalette, QCursor, QIcon
-from PyQt5.QtCore import Qt, QRectF, QTimer, QPoint, QRect
-
-global window
-
+import subprocess, os
+from annotation import Annotation
+from PyQt5.QtWidgets import QApplication, QMainWindow, QGraphicsView, QGraphicsScene, QAction, \
+    QFileDialog, QPushButton, QLabel, QLineEdit
+from PyQt5.QtGui import QPixmap, QIcon
+from PyQt5.QtCore import Qt, QTimer, QPoint
 class ImageDrawer(QMainWindow):
     def __init__(self):
         super().__init__()
 
-        # Create the QGraphicsView and QGraphicsScene
+        self.setup_ui()
+        self.create_graphics_view()
+        self.initialize_variables()
+        self.create_menu_bar()
+        self.connect_mouse_events()
+        self.create_timer()
+        self.create_buttons()
+        self.create_toolbar()
+        self.image_label = self.create_image_label()
+
+    def setup_ui(self):
+        self.setWindowTitle("AnnoVision")
+        self.setWindowState(Qt.WindowMaximized)
+
+    def create_graphics_view(self):
         self.view = QGraphicsView()
         self.scene = QGraphicsScene()
         self.view.setScene(self.scene)
         self.setCentralWidget(self.view)
+
+    def initialize_variables(self):
         self.image = None
         self.line_label = None
-        self.action = 0 # 0 select   1 create   2 edit   3 delete
+        self.action = 0  # 0 select   1 create   2 edit   3 delete
         self.file_path = None
-
         self.folder_dir = None
         self.folder_images = None
         self.folder_current_image_index = None
-
-        # Set window properties
-        self.setWindowState(Qt.WindowMaximized)
-        self.setWindowTitle("Full Screen Example")
-
-        # Store pre-existing annotations
         self.preExistingAnnotations = []
-
-        # Store the drawn rectangles
         self.annotations = []
         self.currentAnnotation = None
         self.possibleSelectAnnotations = []
         self.selectedAnnotationIndex = 0
 
-        # Create the menu actions
-        open_action = QAction("Open Image", self)
-        open_action.triggered.connect(self.open_image)
+    def create_menu_bar(self):
+        open_action = QAction("Open Image (Crtl + O)", self)
+        open_action.triggered.connect(self.open_file_or_folder)
         open_action2 = QAction("Open Folder", self)
-        open_action2.triggered.connect(self.open_folder)
+        open_action2.triggered.connect(self.open_file_or_folder)
 
-        # Create the menu bar
         menu_bar = self.menuBar()
         file_menu = menu_bar.addMenu("File")
         file_menu.addAction(open_action)
         file_menu.addAction(open_action2)
 
-        # Connect the mouse events
+    def connect_mouse_events(self):
         self.scene.mousePressEvent = self.mouse_press_event
         self.scene.mouseReleaseEvent = self.mouse_release_event
         self.scene.keyPressEvent = self.key_press_event
 
-        # Timers
+    def create_timer(self):
         self.timer = QTimer()
         self.timer.timeout.connect(self.drawing_annotation)
 
+    def create_buttons(self):
+        button_data = [
+            {"label": "Open image", "icon": "../icons/cursor.png", "slot": self.action_select},
+            {"label": "Open image folder", "icon": "../icons/cursor.png", "slot": self.action_select},
+            {"label": "Select", "icon": "../icons/cursor.png", "slot": self.action_select},
+            {"label": "Create", "icon": "../icons/box.png", "slot": self.action_create},
+            {"label": "Label", "icon": "../icons/font.png", "slot": self.action_label},
+            {"label": "Delete", "icon": "../icons/delete.png", "slot": self.action_delete},
+            {"label": "Predict", "icon": "../icons/predict.png", "slot": self.run_auto_annotate},
+            {"label": "Previous image", "icon": "", "slot": self.previous_image},
+            {"label": "Next image", "icon": "", "slot": self.next_image}
+        ]
 
-        # Create the buttons
-        button1 = QPushButton("Select", self)
-        button1.setIcon(QIcon('cursor.png'))
-        button1.clicked.connect(self.action_select)
+        self.buttons = []
 
-        button2 = QPushButton("Create", self)
-        button2.setIcon(QIcon('box.png'))
-        button2.clicked.connect(self.action_create)
+        for button_info in button_data:
+            button = QPushButton(button_info["label"], self)
+            icon = button_info["icon"]
+            slot = button_info["slot"]
 
-        button3 = QPushButton("Label", self)
-        button3.setIcon(QIcon('font.png'))
-        button3.clicked.connect(self.action_label)
+            if icon:
+                button.setIcon(QIcon(icon))
+            button.clicked.connect(slot)
+            self.buttons.append(button)
 
-        button4 = QPushButton("Delete", self)
-        button4.setIcon(QIcon('delete.png'))
-        button4.clicked.connect(self.action_delete)
+    def create_toolbar(self):
+        toolbar = self.addToolBar("buttons")
 
-        button5 = QPushButton("Predict", self)
-        button5.setIcon(QIcon('predict.png'))
-        button5.clicked.connect(self.run_auto_annotate)
+        for button in self.buttons:
+            toolbar.addWidget(button)
 
-        button6 = QPushButton("Previous image", self)
-        button6.clicked.connect(self.previous_image)
-
-        button7 = QPushButton("Next image", self)
-        button7.clicked.connect(self.next_image)
-
-        # Add the buttons to the toolbar
-        toolbar = self.addToolBar("Buttons")
-        toolbar.addWidget(button1)
-        toolbar.addWidget(button2)
-        toolbar.addWidget(button3)
-        toolbar.addWidget(button4)
-        toolbar.addWidget(button5)
-        toolbar.addWidget(button6)
-        toolbar.addWidget(button7)
-
-        # Create an empty label for the image
-        self.image_label = QLabel()
-        self.image_label.setAlignment(Qt.AlignCenter)
-        self.image_label.setMinimumSize(400, 400)
-        self.image_label.setStyleSheet("background-color: white; border: none;")
-
+    def create_image_label(self):
+        image_label = QLabel()
+        image_label.setAlignment(Qt.AlignCenter)
+        image_label.setMinimumSize(400, 400)
+        image_label.setStyleSheet("background-color: white; border: none;")
+        return image_label
 
     def open_image(self):
         options = QFileDialog.Options()
-        file_path, _ = QFileDialog.getOpenFileName(self, "Open Image", "", "Image Files (*.png *.jpg *.jpeg *.bmp *.gif)", options=options)
-        if file_path != None:
+        file_path, _ = QFileDialog.getOpenFileName(self, "Open Image", "",
+                                                   "Image Files (*.png *.jpg *.jpeg *.bmp *.gif)", options=options)
+        if file_path is not None:
             # Load the selected image
             self.file_path = file_path
             self.image = QPixmap(file_path)
@@ -130,8 +128,7 @@ class ImageDrawer(QMainWindow):
     def open_folder(self):
         default_dir = '/path/to/default/directory'
         options = QFileDialog.Options()
-        #options |= QFileDialog.Directory
-        selected_dir = QFileDialog.getExistingDirectory(window, "Select Directory", default_dir, options=options)
+        selected_dir = QFileDialog.getExistingDirectory(self, "Select Directory", default_dir, options=options)
 
         if selected_dir:
             self.folder_dir = selected_dir
@@ -145,6 +142,58 @@ class ImageDrawer(QMainWindow):
             self.scene.clear()
             self.scene.addPixmap(self.image)
             self.read_labels(first_image_path)
+
+    def open_file_or_folder(self):
+        options = QFileDialog.Options()
+        file_path, _ = QFileDialog.getOpenFileName(self, "Open Image", "",
+                                                   "Image Files (*.png *.jpg *.jpeg *.bmp *.gif)", options=options)
+
+        if file_path:
+            if os.path.isfile(file_path):
+                self.open_image_file(file_path)
+            elif os.path.isdir(file_path):
+                self.open_image_folder(file_path)
+
+    def open_image_file(self, file_path):
+        self.file_path = file_path
+        self.image = self.load_image(file_path)
+        self.resize_and_display_image()
+
+    def open_image_folder(self, folder_path):
+        self.folder_dir = folder_path
+        self.folder_images = self.get_sorted_image_files(folder_path)
+        self.folder_current_image_index = 0
+
+        first_image_path = self.get_image_path(folder_path, self.folder_images[self.folder_current_image_index])
+
+        self.image = self.load_image(first_image_path)
+        self.resize_and_display_image()
+
+    def load_image(self, file_path):
+        return QPixmap(file_path)
+
+    def get_sorted_image_files(self, folder_path):
+        image_files = sorted(os.listdir(folder_path))
+        image_files.pop(0)  # Remove the first entry if it's not an image
+        return image_files
+
+    def get_image_path(self, folder_path, image_file):
+        return os.path.join(folder_path, image_file)
+
+    def resize_and_display_image(self):
+        screen_geometry = QApplication.desktop().availableGeometry()
+        screen_width = screen_geometry.width()
+        screen_height = screen_geometry.height()
+        desired_width = int(screen_width * 0.9)
+        desired_height = int(screen_height * 0.9)
+
+        self.image = self.image.scaled(desired_width, desired_height, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+
+        self.scene.clear()
+        self.scene.addPixmap(self.image)
+
+        if self.file_path:
+            self.read_labels(self.file_path)
 
     def read_labels(self, image_path):
         image_dir = os.path.abspath(os.path.join(os.path.abspath(image_path), os.pardir))
@@ -224,13 +273,23 @@ class ImageDrawer(QMainWindow):
                 end_point = event.scenePos()
                 end_point.setX(round(end_point.x() - self.image.width() / 2))
                 end_point.setY(round(end_point.y() - self.image.height() / 2))
-                self.currentAnnotation.finalize()
+                self.currentAnnotation.finalizeSelectedRegion()
 
                 self.annotations.append(self.currentAnnotation)
                 self.scene.addItem(self.currentAnnotation.rect)
                 self.scene.addItem(self.currentAnnotation.text)
 
+    def wheelEvent(self, event):
+        if event.modifiers() == Qt.ControlModifier:
+            if event.angleDelta().y() > 0:
+                self.zoom_in()
+            else:
+                self.zoom_out()
+        else:
+            super().wheelEvent(event)
+
     def key_press_event(self, event):
+
         if event.key() == Qt.Key_S and event.modifiers() == Qt.ControlModifier:
             self.action = 0
         if event.key() == Qt.Key_C and event.modifiers() == Qt.ControlModifier:
@@ -251,6 +310,29 @@ class ImageDrawer(QMainWindow):
                 self.scene.removeItem(anno.rect)
                 self.scene.removeItem(anno.text)
                 self.currentAnnotation = None
+
+        if event.key() == Qt.Key_O and event.modifiers() == Qt.ControlModifier:
+            self.open_image()
+        # Zoom out with "[" key
+        if event.key() == Qt.Key_BracketLeft and event.modifiers() == Qt.ControlModifier:
+            self.zoom_out()
+        # Zoom in with "]" key
+        if event.key() == Qt.Key_BracketRight and event.modifiers() == Qt.ControlModifier:
+            self.zoom_in()
+        # Zoom in with "+" key
+        if event.key() == Qt.Key_Equal:
+            self.zoom_in()
+        # Zoom out with "-" key
+        if event.key() == Qt.Key_Minus:
+            self.zoom_out()
+
+    def zoom_in(self):
+        if self.image:
+            self.view.scale(1.1, 1.1)
+
+    def zoom_out(self):
+        if self.image:
+            self.view.scale(0.9, 0.9)
 
     def action_select(self):
         self.action = 0
@@ -310,104 +392,7 @@ class ImageDrawer(QMainWindow):
 
     def run_auto_annotate(self):
         if self.file_path != None:
-            subprocess_command = f"python ../yolov7/detect.py --weights ../yolov7/yolov7-tiny.pt --conf 0.25 --nosave --save-txt --source {self.file_path}"  # Replace with the actual subprocess command
+            subprocess_command = f"python ../yolov7/detect.py --weights ../yolov7/yolov7-tiny.pt --conf 0.25 --nosave --save-txt --source {self.file_path} --name {self.file_path}"
             subprocess.run(subprocess_command, shell=True)
         else:
             print("No image file selected.")
-
-
-class Annotation():
-    def __init__(self, start_point, end_point=None, label="Label"):
-        self.rect = QGraphicsRectItem()
-        self.start_point = start_point
-        self.end_point = end_point
-        self.width = None
-        self.height = None
-        self.label = label
-        self.start_point_mouse = QCursor.pos()
-
-        self.pen = QPen(Qt.red)
-        self.pen.setWidth(2)
-        self.rect.setPen(self.pen)
-
-        self.scene = QGraphicsScene()
-        self.scene.addText("")
-        self.text = self.scene.items()[0]
-
-        if (end_point != None):
-            self.rect.setRect(QRectF(start_point, end_point))
-            self.text.setPos(start_point.x() - 5, start_point.y() - 16)
-            self.text.setHtml(f"<div style='color: white; background-color: red;'>{self.label}</div>")
-
-    def select(self):
-        self.pen.setColor(Qt.green)
-        self.rect.setPen(self.pen)
-        self.rect.setRect(QRectF(self.start_point, self.end_point))
-        self.text.setHtml(f"<div style='color: white; background-color: green;'>{self.label}</div>")
-
-    def deselect(self):
-        self.pen.setColor(Qt.red)
-        self.rect.setPen(self.pen)
-        self.rect.setRect(QRectF(self.start_point, self.end_point))
-        self.text.setHtml(f"<div style='color: white; background-color: red;'>{self.label}</div>")
-
-    def draw(self):
-        end_point_mouse = QCursor.pos()
-        total_mouse = end_point_mouse - self.start_point_mouse
-        self.width = total_mouse.x()
-        self.height = total_mouse.y()
-        self.end_point = QPoint(int(self.start_point.x() + self.width), int(self.start_point.y() + self.height))
-        start = QPoint(int(self.start_point.x()), int(self.start_point.y()))
-        end = QPoint(int(self.end_point.x()), int(self.end_point.y()))
-
-        if (self.width < 0):
-            start.setX(self.end_point.x())
-            end.setX(int(self.start_point.x()))
-
-        if (self.height < 0):
-            start.setY(self.end_point.y())
-            end.setY(int(self.start_point.y()))
-
-        start.setX( max(0, start.x()) )
-        start.setY( max(0, start.y()) )
-        end.setX(min(window.image.width(), end.x()))
-        end.setY(min(window.image.height(), end.y()))
-
-
-        self.rect.setRect(QRectF(start, end))
-
-    def finalize(self):
-        end_point_mouse = QCursor.pos()
-        total_mouse = end_point_mouse - self.start_point_mouse
-        self.width = total_mouse.x()
-        self.height = total_mouse.y()
-        self.end_point = QPoint(int(self.start_point.x() + self.width), int(self.start_point.y() + self.height))
-        start = QPoint(int(self.start_point.x()), int(self.start_point.y()))
-        end = QPoint(int(self.end_point.x()), int(self.end_point.y()))
-
-        if (self.width < 0):
-            start.setX(self.end_point.x())
-            end.setX(int(self.start_point.x()))
-
-        if (self.height < 0):
-            start.setY(self.end_point.y())
-            end.setY(int(self.start_point.y()))
-
-        start.setX(max(0, start.x()))
-        start.setY(max(0, start.y()))
-        end.setX(min(window.image.width(), end.x()))
-        end.setY(min(window.image.height(), end.y()))
-
-        self.start_point = start
-        self.end_point = end
-
-        self.rect.setRect(QRectF(self.start_point, self.end_point))
-        self.text.setPos(self.start_point.x() - 5, self.start_point.y() - 16)
-        self.text.setHtml(f"<div style='color: white; background-color: red;'>{self.label}</div>")
-
-
-if __name__ == '__main__':
-    app = QApplication(sys.argv)
-    window = ImageDrawer()
-    window.show()
-    sys.exit(app.exec_())
