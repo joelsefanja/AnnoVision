@@ -1,7 +1,6 @@
 import subprocess, os
 from enum import Enum
 from annotation import Annotation
-from image_switcher import ImageSwitcher
 from PyQt5.QtWidgets import QApplication, QMainWindow, QGraphicsView, QGraphicsScene, QAction, \
     QFileDialog, QPushButton, QLabel, QLineEdit
 from PyQt5.QtGui import QPixmap, QIcon
@@ -45,7 +44,7 @@ class ImageDrawer(QMainWindow):
         self.action = 0  # 0 select   1 create   2 edit   3 delete
         self.file_path = None
         self.folder_dir = None
-        self.folder_images = None
+        self.folder_images = []
         self.folder_current_image_index = None
         self.preExistingAnnotations = []
         self.annotations = []
@@ -55,9 +54,9 @@ class ImageDrawer(QMainWindow):
 
     def create_menu_bar(self):
         open_action = QAction("Open Image (Crtl + O)", self)
-        open_action.triggered.connect(self.open_file_or_folder)
+        open_action.triggered.connect(self.open_image_file)
         open_action2 = QAction("Open Folder", self)
-        open_action2.triggered.connect(self.open_file_or_folder)
+        open_action2.triggered.connect(self.open_image_folder)
 
         menu_bar = self.menuBar()
         file_menu = menu_bar.addMenu("File")
@@ -75,15 +74,15 @@ class ImageDrawer(QMainWindow):
 
     def create_buttons(self):
         button_data = [
-            {"label": "Open image", "icon": "../icons/cursor.png", "slot": self.action_select},
-            {"label": "Open image folder", "icon": "../icons/cursor.png", "slot": self.action_select},
+            {"label": "Open image", "icon": "../icons/cursor.png", "slot": self.open_image_file},
+            {"label": "Open image folder", "icon": "../icons/cursor.png", "slot": self.open_image_folder},
             {"label": "Select", "icon": "../icons/cursor.png", "slot": self.action_select},
             {"label": "Create", "icon": "../icons/box.png", "slot": self.action_create},
             {"label": "Label", "icon": "../icons/font.png", "slot": self.action_label},
             {"label": "Delete", "icon": "../icons/delete.png", "slot": self.action_delete},
             {"label": "Predict", "icon": "../icons/predict.png", "slot": self.run_auto_annotate},
-            {"label": "Previous image", "icon": "", "slot": ImageSwitcher.previous_image},
-            {"label": "Next image", "icon": "", "slot": ImageSwitcher.next_image}
+            {"label": "Previous image", "icon": "", "slot": self.previous_image},
+            {"label": "Next image", "icon": "", "slot": self.next_image}
         ]
 
         self.buttons = []
@@ -111,55 +110,38 @@ class ImageDrawer(QMainWindow):
         image_label.setStyleSheet("background-color: white; border: none;")
         return image_label
 
-    def open_image(self):
-        options = QFileDialog.Options()
-        file_path, _ = QFileDialog.getOpenFileName(self, "Open Image", "",
-                                                   "Image Files (*.png *.jpg *.jpeg *.bmp *.gif)", options=options)
-        if file_path is not None:
-            # Load the selected image
-            self.file_path = file_path
-            self.image = QPixmap(file_path)
-
-            # Calculate the new size based on the screen geometry and desired size reduction
-            screen_geometry = QApplication.desktop().availableGeometry()
-            screen_width = screen_geometry.width()
-            screen_height = screen_geometry.height()
-            desired_width = int(screen_width * 0.9)
-            desired_height = int(screen_height * 0.9)
-
-            # Resize the image to fit the new size while maintaining aspect ratio
-            self.image = self.image.scaled(desired_width, desired_height, Qt.KeepAspectRatio, Qt.SmoothTransformation)
-
-            # Clear the scene and add the resized image
-            self.scene.clear()
-            self.scene.addPixmap(self.image)
-            self.read_labels(file_path)
-
-    def open_file_or_folder(self):
-        options = QFileDialog.Options()
-        file_path, _ = QFileDialog.getOpenFileName(self, "Open Image", "",
-                                                   "Image Files (*.png *.jpg *.jpeg *.bmp *.gif)", options=options)
-
-        if file_path:
-            if os.path.isfile(file_path):
-                self.open_image_file(file_path)
-            elif os.path.isdir(file_path):
-                self.open_image_folder(file_path)
-
     def open_image_file(self, file_path):
-        self.file_path = file_path
-        self.image = self.load_image(file_path)
+        # Reset annotations
+        self.file_path = None
+        self.folder_dir = None
+        self.folder_images = []
+        self.folder_current_image_index = None
+        self.preExistingAnnotations = []
+        self.annotations = []
+        self.currentAnnotation = None
+
+        options = QFileDialog.Options()
+        self.file_path, _ = QFileDialog.getOpenFileName(self, "Open Image", "",
+                                                   "Image Files (*.png *.jpg *.jpeg *.bmp *.gif)", options=options)
+        self.image = self.load_image(self.file_path)
         self.resize_and_display_image()
 
     def open_image_folder(self, folder_path):
-        self.folder_dir = folder_path
-        self.folder_images = self.get_sorted_image_files(folder_path)
+        # Reset annotations
+        self.file_path = None
+        self.folder_dir = None
+        self.folder_images = []
+        self.folder_current_image_index = None
+        self.preExistingAnnotations = []
+        self.annotations = []
+        self.currentAnnotation = None
+
+        options = QFileDialog.Options()
+        self.folder_dir = QFileDialog.getExistingDirectory(self, 'Select Folder')
+        self.folder_images = self.get_sorted_image_files(self.folder_dir)
         self.folder_current_image_index = 0
 
-        first_image_path = self.get_image_path(folder_path, self.folder_images[self.folder_current_image_index])
-
-        self.image = self.load_image(first_image_path)
-        self.resize_and_display_image()
+        self.update_image()
 
     def load_image(self, file_path):
         return QPixmap(file_path)
@@ -186,6 +168,10 @@ class ImageDrawer(QMainWindow):
 
         if self.file_path:
             self.read_labels(self.file_path)
+
+        if self.folder_dir:
+            image_path = os.path.join(self.folder_dir, self.folder_images[self.folder_current_image_index])
+            self.read_labels(image_path)
 
     def read_labels(self, image_path):
         image_dir = os.path.abspath(os.path.join(os.path.abspath(image_path), os.pardir))
@@ -234,10 +220,55 @@ class ImageDrawer(QMainWindow):
         else:
             super().wheelEvent(event)
 
-    def key_press_event(self, event):
+    def mouse_press_event(self, event):
+        if event.button() == Qt.LeftButton and self.image and event.type() == event.GraphicsSceneMousePress:
+            if (self.action == 0):
+                mouse_pos = event.scenePos()
 
+                self.currentAnnotation = None
+                annotations = []
+                for annotation in self.annotations:
+                    annotation.deselect()
+                    if (annotation.start_point.x() < mouse_pos.x() < annotation.end_point.x() and
+                            annotation.start_point.y() < mouse_pos.y() < annotation.end_point.y()):
+                        annotations.append(annotation)
+
+                if (annotations != []):
+                    if (annotations == self.possibleSelectAnnotations):
+                        self.selectedAnnotationIndex += 1
+                    else:
+                        self.selectedAnnotationIndex = 0
+
+                    self.possibleSelectAnnotations = annotations
+                    self.currentAnnotation = self.possibleSelectAnnotations[self.selectedAnnotationIndex % len(self.possibleSelectAnnotations)]
+                    self.currentAnnotation.select()
+
+            if (self.action == 1):
+                start_point = event.scenePos()
+                start_point.setX(round(start_point.x()))
+                start_point.setY(round(start_point.y()))
+
+                self.currentAnnotation = Annotation(start_point)
+                self.drawing_annotation()
+                self.timer.start(16)
+
+    def mouse_release_event(self, event):
+        if event.button() == Qt.LeftButton and self.image:
+            if self.action == 1:
+                self.timer.stop()
+
+                end_point = event.scenePos()
+                end_point.setX(round(end_point.x() - self.image.width() / 2))
+                end_point.setY(round(end_point.y() - self.image.height() / 2))
+                self.currentAnnotation.finish_drawing(self.image.width(), self.image.height())
+
+                self.annotations.append(self.currentAnnotation)
+                self.scene.addItem(self.currentAnnotation.rect)
+                self.scene.addItem(self.currentAnnotation.text)
+
+    def key_press_event(self, event):
         if event.key() == Qt.Key_S and event.modifiers() == Qt.ControlModifier:
-            Annotation.draw() = 0
+            self.action = 0
         if event.key() == Qt.Key_C and event.modifiers() == Qt.ControlModifier:
             self.action = 1
         if event.key() == Qt.Key_E and event.modifiers() == Qt.ControlModifier:
@@ -304,27 +335,12 @@ class ImageDrawer(QMainWindow):
             self.scene.removeItem(anno.text)
             self.currentAnnotation = None
 
-    def load_folder_images(self):
-        # Check if the folder directory is valid
-        if not os.path.isdir(self.folder_dir):
-            print("Invalid folder directory")
-            return
-
-        # Retrieve the image files in the folder directory
-        self.folder_images = [file for file in os.listdir(self.folder_dir) if file.lower().endswith(('.png', '.jpg', '.jpeg'))]
-
-        # Check if there are any image files in the folder
-        if not self.folder_images:
-            print("No image files found in the folder")
-            return
-
-        # Set the current image index to the first image
-        self.folder_current_image_index = 0
-
-        # Load and display the first image
-        self.update_image()
-
     def update_image(self):
+        # Reset annotations
+        self.preExistingAnnotations = []
+        self.annotations = []
+        self.currentAnnotation = None
+
         # Build the path to the current image
         image_path = os.path.join(self.folder_dir, self.folder_images[self.folder_current_image_index])
 
@@ -334,11 +350,7 @@ class ImageDrawer(QMainWindow):
         self.scene.addPixmap(self.image)
 
         # Read labels associated with the image
-        self.read_labels(image_path)
-
-    def read_labels(self, image_path):
-        # Code to read labels associated with the image
-        pass
+        self.resize_and_display_image()
 
     def previous_image(self):
         # Check if the current image index is not set
@@ -377,7 +389,7 @@ class ImageDrawer(QMainWindow):
             self.currentAnnotation = None
 
     def drawing_annotation(self):
-        self.currentAnnotation.draw()
+        self.currentAnnotation.draw(self.image.width(), self.image.height())
         self.scene.addItem(self.currentAnnotation.rect)
 
     def run_auto_annotate(self):

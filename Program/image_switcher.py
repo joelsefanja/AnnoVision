@@ -3,7 +3,7 @@ from PyQt5.QtGui import QPixmap
 
 class ImageSwitcher:
     def __init__(self):
-        self.folder_dir = 'path/to/your/folder'
+        self.folder_dir = None
         self.folder_images = []
         self.folder_current_image_index = None
         self.image = None
@@ -45,30 +45,3 @@ class ImageSwitcher:
         # Code to read labels associated with the image
         pass
 
-    def previous_image(self):
-        # Check if the current image index is not set
-        if self.folder_current_image_index is None:
-            return
-
-        # Decrement the current image index
-        self.folder_current_image_index -= 1
-        # Wrap around to the last image if the index goes below zero
-        if self.folder_current_image_index < 0:
-            self.folder_current_image_index = len(self.folder_images) - 1
-
-        # Update the displayed image
-        self.update_image()
-
-    def next_image(self):
-        # Check if the current image index is not set
-        if self.folder_current_image_index is None:
-            return
-
-        # Increment the current image index
-        self.folder_current_image_index += 1
-        # Wrap around to the first image if the index goes beyond the last image
-        if self.folder_current_image_index >= len(self.folder_images):
-            self.folder_current_image_index = 0
-
-        # Update the displayed image
-        self.update_image()
