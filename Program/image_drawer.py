@@ -1,9 +1,20 @@
 import subprocess, os
+from enum import Enum
 from annotation import Annotation
+from image_switcher import ImageSwitcher
 from PyQt5.QtWidgets import QApplication, QMainWindow, QGraphicsView, QGraphicsScene, QAction, \
     QFileDialog, QPushButton, QLabel, QLineEdit
 from PyQt5.QtGui import QPixmap, QIcon
 from PyQt5.QtCore import Qt, QTimer, QPoint
+
+class Action(Enum):
+    OPEN = 1
+    SAVE = 2
+    COPY = 3
+    PASTE = 4
+    UNDO = 5
+    REDO = 6
+
 class ImageDrawer(QMainWindow):
     def __init__(self):
         super().__init__()
@@ -71,8 +82,8 @@ class ImageDrawer(QMainWindow):
             {"label": "Label", "icon": "../icons/font.png", "slot": self.action_label},
             {"label": "Delete", "icon": "../icons/delete.png", "slot": self.action_delete},
             {"label": "Predict", "icon": "../icons/predict.png", "slot": self.run_auto_annotate},
-            {"label": "Previous image", "icon": "", "slot": self.previous_image},
-            {"label": "Next image", "icon": "", "slot": self.next_image}
+            {"label": "Previous image", "icon": "", "slot": ImageSwitcher.previous_image},
+            {"label": "Next image", "icon": "", "slot": ImageSwitcher.next_image}
         ]
 
         self.buttons = []
@@ -122,26 +133,7 @@ class ImageDrawer(QMainWindow):
             # Clear the scene and add the resized image
             self.scene.clear()
             self.scene.addPixmap(self.image)
-
             self.read_labels(file_path)
-
-    def open_folder(self):
-        default_dir = '/path/to/default/directory'
-        options = QFileDialog.Options()
-        selected_dir = QFileDialog.getExistingDirectory(self, "Select Directory", default_dir, options=options)
-
-        if selected_dir:
-            self.folder_dir = selected_dir
-            self.folder_images = sorted(os.listdir(selected_dir))
-            self.folder_images.pop(0)
-            self.folder_current_image_index = 0
-
-            first_image_path = os.path.join(selected_dir, self.folder_images[self.folder_current_image_index])
-
-            self.image = QPixmap(first_image_path)
-            self.scene.clear()
-            self.scene.addPixmap(self.image)
-            self.read_labels(first_image_path)
 
     def open_file_or_folder(self):
         options = QFileDialog.Options()
@@ -233,52 +225,6 @@ class ImageDrawer(QMainWindow):
                     self.scene.addItem(self.currentAnnotation.rect)
                     self.scene.addItem(self.currentAnnotation.text)
 
-    def mouse_press_event(self, event):
-        if event.button() == Qt.LeftButton and self.image and event.type() == event.GraphicsSceneMousePress:
-            if (self.action == 0):
-                mouse_pos = event.scenePos()
-
-                self.currentAnnotation = None
-                annotations = []
-                for annotation in self.annotations:
-                    annotation.deselect()
-                    if (annotation.start_point.x() < mouse_pos.x() < annotation.end_point.x() and
-                            annotation.start_point.y() < mouse_pos.y() < annotation.end_point.y()):
-                        annotations.append(annotation)
-
-                if (annotations != []):
-                    if (annotations == self.possibleSelectAnnotations):
-                        self.selectedAnnotationIndex += 1
-                    else:
-                        self.selectedAnnotationIndex = 0
-
-                    self.possibleSelectAnnotations = annotations
-                    self.currentAnnotation = self.possibleSelectAnnotations[self.selectedAnnotationIndex % len(self.possibleSelectAnnotations)]
-                    self.currentAnnotation.select()
-
-            if (self.action == 1):
-                start_point = event.scenePos()
-                start_point.setX(round(start_point.x()))
-                start_point.setY(round(start_point.y()))
-
-                self.currentAnnotation = Annotation(start_point)
-                self.drawing_annotation()
-                self.timer.start(16)
-
-    def mouse_release_event(self, event):
-        if event.button() == Qt.LeftButton and self.image:
-            if self.action == 1:
-                self.timer.stop()
-
-                end_point = event.scenePos()
-                end_point.setX(round(end_point.x() - self.image.width() / 2))
-                end_point.setY(round(end_point.y() - self.image.height() / 2))
-                self.currentAnnotation.finalizeSelectedRegion()
-
-                self.annotations.append(self.currentAnnotation)
-                self.scene.addItem(self.currentAnnotation.rect)
-                self.scene.addItem(self.currentAnnotation.text)
-
     def wheelEvent(self, event):
         if event.modifiers() == Qt.ControlModifier:
             if event.angleDelta().y() > 0:
@@ -291,7 +237,7 @@ class ImageDrawer(QMainWindow):
     def key_press_event(self, event):
 
         if event.key() == Qt.Key_S and event.modifiers() == Qt.ControlModifier:
-            self.action = 0
+            Annotation.draw() = 0
         if event.key() == Qt.Key_C and event.modifiers() == Qt.ControlModifier:
             self.action = 1
         if event.key() == Qt.Key_E and event.modifiers() == Qt.ControlModifier:
@@ -358,25 +304,69 @@ class ImageDrawer(QMainWindow):
             self.scene.removeItem(anno.text)
             self.currentAnnotation = None
 
-    def previous_image(self):
-        self.folder_current_image_index -= 1
-        if (self.folder_current_image_index < 0): self.folder_current_image_index = len(self.folder_images) - 1
+    def load_folder_images(self):
+        # Check if the folder directory is valid
+        if not os.path.isdir(self.folder_dir):
+            print("Invalid folder directory")
+            return
 
+        # Retrieve the image files in the folder directory
+        self.folder_images = [file for file in os.listdir(self.folder_dir) if file.lower().endswith(('.png', '.jpg', '.jpeg'))]
+
+        # Check if there are any image files in the folder
+        if not self.folder_images:
+            print("No image files found in the folder")
+            return
+
+        # Set the current image index to the first image
+        self.folder_current_image_index = 0
+
+        # Load and display the first image
+        self.update_image()
+
+    def update_image(self):
+        # Build the path to the current image
         image_path = os.path.join(self.folder_dir, self.folder_images[self.folder_current_image_index])
+
+        # Load the image and display it in the scene
         self.image = QPixmap(image_path)
         self.scene.clear()
         self.scene.addPixmap(self.image)
+
+        # Read labels associated with the image
         self.read_labels(image_path)
+
+    def read_labels(self, image_path):
+        # Code to read labels associated with the image
+        pass
+
+    def previous_image(self):
+        # Check if the current image index is not set
+        if self.folder_current_image_index is None:
+            return
+
+        # Decrement the current image index
+        self.folder_current_image_index -= 1
+        # Wrap around to the last image if the index goes below zero
+        if self.folder_current_image_index < 0:
+            self.folder_current_image_index = len(self.folder_images) - 1
+
+        # Update the displayed image
+        self.update_image()
 
     def next_image(self):
-        self.folder_current_image_index += 1
-        if (self.folder_current_image_index > len(self.folder_images) - 1): self.folder_current_image_index = 0
+        # Check if the current image index is not set
+        if self.folder_current_image_index is None:
+            return
 
-        image_path = os.path.join(self.folder_dir, self.folder_images[self.folder_current_image_index])
-        self.image = QPixmap(image_path)
-        self.scene.clear()
-        self.scene.addPixmap(self.image)
-        self.read_labels(image_path)
+        # Increment the current image index
+        self.folder_current_image_index += 1
+        # Wrap around to the first image if the index goes beyond the last image
+        if self.folder_current_image_index >= len(self.folder_images):
+            self.folder_current_image_index = 0
+
+        # Update the displayed image
+        self.update_image()
 
     def close_line_label(self):
         if (self.line_label != None and self.currentAnnotation != None):

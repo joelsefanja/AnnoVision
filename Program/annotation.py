@@ -1,4 +1,4 @@
-from PyQt5.QtWidgets import QGraphicsScene, QGraphicsRectItem
+from PyQt5.QtWidgets import QGraphicsScene, QGraphicsRectItem, QMainWindow
 from PyQt5.QtGui import QPen, QCursor
 from PyQt5.QtCore import Qt, QRectF, QPoint
 
@@ -25,6 +25,51 @@ class Annotation():
             self.text.setPos(start_point.x() - 5, start_point.y() - 16)
             self.text.setHtml(f"<div style='color: white; background-color: red;'>{self.label}</div>")
 
+    def mouse_press_event(self, event):
+        if event.button() == Qt.LeftButton and self.image and event.type() == event.GraphicsSceneMousePress:
+            if (self.action == 0):
+                mouse_pos = event.scenePos()
+
+                self.currentAnnotation = None
+                annotations = []
+                for annotation in self.annotations:
+                    annotation.deselect()
+                    if (annotation.start_point.x() < mouse_pos.x() < annotation.end_point.x() and
+                            annotation.start_point.y() < mouse_pos.y() < annotation.end_point.y()):
+                        annotations.append(annotation)
+
+                if (annotations != []):
+                    if (annotations == self.possibleSelectAnnotations):
+                        self.selectedAnnotationIndex += 1
+                    else:
+                        self.selectedAnnotationIndex = 0
+
+                    self.possibleSelectAnnotations = annotations
+                    self.currentAnnotation = self.possibleSelectAnnotations[self.selectedAnnotationIndex % len(self.possibleSelectAnnotations)]
+                    self.currentAnnotation.select()
+
+            if (self.action == 1):
+                start_point = event.scenePos()
+                start_point.setX(round(start_point.x()))
+                start_point.setY(round(start_point.y()))
+
+                self.currentAnnotation = Annotation(start_point)
+                self.drawing_annotation()
+                self.timer.start(16)
+
+    def mouse_release_event(self, event):
+        if event.button() == Qt.LeftButton and self.image:
+            if self.action == 1:
+                self.timer.stop()
+
+                end_point = event.scenePos()
+                end_point.setX(round(end_point.x() - self.image.width() / 2))
+                end_point.setY(round(end_point.y() - self.image.height() / 2))
+                self.currentAnnotation.finalizeSelectedRegion()
+
+                self.annotations.append(self.currentAnnotation)
+                self.scene.addItem(self.currentAnnotation.rect)
+                self.scene.addItem(self.currentAnnotation.text)
     def select(self):
         self.pen.setColor(Qt.green)
         self.rect.setPen(self.pen)
@@ -37,7 +82,7 @@ class Annotation():
         self.rect.setRect(QRectF(self.start_point, self.end_point))
         self.text.setHtml(f"<div style='color: white; background-color: red;'>{self.label}</div>")
 
-    def draw(self):
+    def draw(self, start_point, end_point, image_width, image_height):
         end_point_mouse = QCursor.pos()
         total_mouse = end_point_mouse - self.start_point_mouse
         self.width = total_mouse.x()
@@ -54,16 +99,14 @@ class Annotation():
             start.setY(self.end_point.y())
             end.setY(int(self.start_point.y()))
 
-        start.setX( max(0, start.x()) )
-        start.setY( max(0, start.y()) )
-        end.setX(min(window.image.width(), end.x()))
-        end.setY(min(window.image.height(), end.y()))
-
+        start.setX(max(0, start.x()))
+        start.setY(max(0, start.y()))
+        end.setX(min(image_width, end.x()))
+        end.setY(min(image_height, end.y()))
 
         self.rect.setRect(QRectF(start, end))
 
-    def finalizeSelectedRegion(self):
-
+    def finalizeSelectedRegion(self, start_point, end_point, image_width, image_height):
         end_point_mouse = QCursor.pos()
         total_mouse = end_point_mouse - self.start_point_mouse
 
@@ -72,25 +115,25 @@ class Annotation():
         self.height = total_mouse.y()
 
         # Calculate end point
-        self.end_point = QPoint(int(self.start_point.x() + self.width), int(self.start_point.y() + self.height))
+        self.end_point = QPoint(int(start_point.x() + self.width), int(start_point.y() + self.height))
 
         # Adjust start and end points if width or height is negative
-        start = QPoint(int(self.start_point.x()), int(self.start_point.y()))
+        start = QPoint(int(start_point.x()), int(start_point.y()))
         end = QPoint(int(self.end_point.x()), int(self.end_point.y()))
 
         if self.width < 0:
             start.setX(self.end_point.x())
-            end.setX(int(self.start_point.x()))
+            end.setX(int(start_point.x()))
 
         if self.height < 0:
             start.setY(self.end_point.y())
-            end.setY(int(self.start_point.y()))
+            end.setY(int(start_point.y()))
 
         # Clamp start and end points to image bounds
         start.setX(max(0, start.x()))
         start.setY(max(0, start.y()))
-        end.setX(min(window.image.width(), end.x()))
-        end.setY(min(window.image.height(), end.y()))
+        end.setX(min(image_width, end.x()))
+        end.setY(min(image_height, end.y()))
 
         # Update start and end points
         self.start_point = start
