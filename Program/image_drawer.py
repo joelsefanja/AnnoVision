@@ -21,7 +21,7 @@ class ImageDrawer(QMainWindow):
         self.setup_ui()
         self.create_graphics_view()
         self.initialize_variables()
-        self.create_menu_bar()
+        # self.create_menu_bar()
         self.connect_mouse_events()
         self.create_timer()
         self.create_buttons()
@@ -51,7 +51,6 @@ class ImageDrawer(QMainWindow):
         self.currentAnnotation = None
         self.possibleSelectAnnotations = []
         self.selectedAnnotationIndex = 0
-
     def create_menu_bar(self):
         open_action = QAction("Open Image (Crtl + O)", self)
         open_action.triggered.connect(self.open_image_file)
