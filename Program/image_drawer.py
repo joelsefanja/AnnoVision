@@ -42,7 +42,7 @@ class ImageDrawer(QMainWindow):
         self.image = None
         self.line_label = None
         self.action = 0  # 0 select   1 create   2 edit   3 delete
-        self.file_path = None
+        self.image_path = None
         self.folder_dir = None
         self.folder_images = []
         self.folder_current_image_index = None
@@ -120,7 +120,7 @@ class ImageDrawer(QMainWindow):
 
     def open_image_file(self, file_path):
         # Reset annotations
-        self.file_path = None
+        self.image_path = None
         self.folder_dir = None
         self.folder_images = []
         self.folder_current_image_index = None
@@ -129,14 +129,14 @@ class ImageDrawer(QMainWindow):
         self.currentAnnotation = None
 
         options = QFileDialog.Options()
-        self.file_path, _ = QFileDialog.getOpenFileName(self, "Open Image", "",
-                                                   "Image Files (*.png *.jpg *.jpeg *.bmp *.gif)", options=options)
-        self.image = self.load_image(self.file_path)
+        self.image_path, _ = QFileDialog.getOpenFileName(self, "Open Image", "",
+                                                   "Image Files (*.png *.jpg *.jpeg)", options=options)
+        self.image = self.load_image(self.image_path)
         self.resize_and_display_image()
 
     def open_image_folder(self, folder_path):
         # Reset annotations
-        self.file_path = None
+        self.image_path = None
         self.folder_dir = None
         self.folder_images = []
         self.folder_current_image_index = None
@@ -149,14 +149,17 @@ class ImageDrawer(QMainWindow):
         self.folder_images = self.get_sorted_image_files(self.folder_dir)
         self.folder_current_image_index = 0
 
+        self.image_path = os.path.join(self.folder_dir, self.folder_images[self.folder_current_image_index])
+
         self.update_image()
 
     def load_image(self, file_path):
         return QPixmap(file_path)
 
     def get_sorted_image_files(self, folder_path):
-        image_files = sorted(os.listdir(folder_path))
-        image_files.pop(0)  # Remove the first entry if it's not an image
+        included_extensions = ['jpg', 'jpeg', 'png']
+        image_files = [file for file in os.listdir(folder_path)
+                       if any(file.endswith(ext) for ext in included_extensions)]
         return image_files
 
     def get_image_path(self, folder_path, image_file):
@@ -174,12 +177,8 @@ class ImageDrawer(QMainWindow):
         self.scene.clear()
         self.scene.addPixmap(self.image)
 
-        if self.file_path:
-            self.read_labels(self.file_path)
-
-        if self.folder_dir:
-            image_path = os.path.join(self.folder_dir, self.folder_images[self.folder_current_image_index])
-            self.read_labels(image_path)
+        if self.image_path:
+            self.read_labels(self.image_path)
 
     def read_labels(self, image_path):
         image_dir = os.path.abspath(os.path.join(os.path.abspath(image_path), os.pardir))
@@ -371,6 +370,7 @@ class ImageDrawer(QMainWindow):
             self.folder_current_image_index = len(self.folder_images) - 1
 
         # Update the displayed image
+        self.image_path = os.path.join(self.folder_dir, self.folder_images[self.folder_current_image_index])
         self.update_image()
 
     def next_image(self):
@@ -385,6 +385,7 @@ class ImageDrawer(QMainWindow):
             self.folder_current_image_index = 0
 
         # Update the displayed image
+        self.image_path = os.path.join(self.folder_dir, self.folder_images[self.folder_current_image_index])
         self.update_image()
 
     def close_line_label(self):
@@ -400,8 +401,9 @@ class ImageDrawer(QMainWindow):
         self.scene.addItem(self.currentAnnotation.rect)
 
     def run_auto_annotate(self):
-        if self.file_path != None:
-            subprocess_command = f"python ../yolov7/detect.py --weights ../yolov7/yolov7-tiny.pt --conf 0.25 --nosave --save-txt --source {self.file_path} --name {self.file_path}"
+        if self.image_path != None:
+            subprocess_command = f"python ../yolov7/detect.py --weights ../yolov7/yolov7-tiny.pt --conf 0.25 --nosave --save-txt --source {self.image_path} --name {self.image_path}"
             subprocess.run(subprocess_command, shell=True)
+            self.update_image()
         else:
             print("No image file selected.")
