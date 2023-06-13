@@ -108,11 +108,13 @@ class ImageDrawer(QMainWindow):
         image_label.setStyleSheet("background-color: white; border: none;")
         return image_label
 
-    def open_image_file(self, file_path):
-        # Reset annotations
+    def reset_annotations(self):
         self.preExistingAnnotations = []
         self.annotations = []
         self.currentAnnotation = None
+
+    def open_image_file(self):
+        self.reset_annotations()
 
         options = QFileDialog.Options()
         file_path, _ = QFileDialog.getOpenFileName(self, "Open Image", "", "Image Files (*.png *.jpg *.jpeg)",
@@ -121,7 +123,7 @@ class ImageDrawer(QMainWindow):
         if file_path:
             self.image_path = file_path
             self.image = self.load_image(self.image_path)
-            self.resize_and_display_image()
+            self.update_image()  # Call update_image function
 
     def open_image_folder(self):
         # Reset annotations
@@ -138,8 +140,7 @@ class ImageDrawer(QMainWindow):
             self.folder_current_image_index = len(self.folder_images) - 1
 
             self.image_path = self.get_image_path(self.folder_dir, self.folder_images[self.folder_current_image_index])
-
-            self.update_image()
+            self.update_image()  # Call update_image function
 
     def load_image(self, file_path):
         return QPixmap(file_path)
