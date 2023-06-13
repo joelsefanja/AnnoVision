@@ -235,12 +235,14 @@ class ImageDrawer(QMainWindow):
                 # Find all annotations at the mouse position
                 annotations = [annotation for annotation in self.annotations if annotation.rect.contains(mouse_pos)]
 
+                if self.currentAnnotation:
+                    self.currentAnnotation.deselect()
+
                 if annotations:
                     if self.currentAnnotation in annotations:
                         # If the current annotation is in the list of overlapping annotations,
                         # move to the next one
                         index = annotations.index(self.currentAnnotation)
-                        self.currentAnnotation.deselect()
                         self.currentAnnotation = annotations[(index + 1) % len(annotations)]
                         self.currentAnnotation.select()
                     else:
@@ -248,6 +250,8 @@ class ImageDrawer(QMainWindow):
                         # select the first annotation from the list
                         self.currentAnnotation = annotations[0]
                         self.currentAnnotation.select()
+                else:
+                    self.currentAnnotation = None
 
             if self.action == 1:
                 start_point = event.scenePos()
