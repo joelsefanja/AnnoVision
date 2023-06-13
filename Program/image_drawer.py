@@ -109,11 +109,13 @@ class ImageDrawer(QMainWindow):
         return image_label
 
     def reset_annotations(self):
+        # Reset the annotations
         self.preExistingAnnotations = []
         self.annotations = []
         self.currentAnnotation = None
 
     def open_image_file(self):
+        # Reset annotations when opening an image file
         self.reset_annotations()
 
         options = QFileDialog.Options()
@@ -121,33 +123,28 @@ class ImageDrawer(QMainWindow):
                                                    options=options)
 
         if file_path:
-            self.image_path = file_path
-            self.image = self.load_image(self.image_path)
-            self.update_image()  # Call update_image function
             self.folder_dir = os.path.dirname(file_path)
-            self.folder_images = self.get_sorted_image_files(self.folder_dir)
-            self.folder_current_image_index = len(self.folder_images) - 1
-
-            self.image_path = self.get_image_path(self.folder_dir,
-                                                  self.folder_images[self.folder_current_image_index])
+            self.update_folder_state()
+            self.image_path = file_path
             self.update_image()  # Call update_image function
 
     def open_image_folder(self):
-        # Reset annotations
-        self.preExistingAnnotations = []
-        self.annotations = []
-        self.currentAnnotation = None
+        # Reset annotations when opening an image folder
+        self.reset_annotations()
 
         options = QFileDialog.Options()
         folder_dir = QFileDialog.getExistingDirectory(self, 'Select Folder')
 
         if folder_dir:
             self.folder_dir = folder_dir
-            self.folder_images = self.get_sorted_image_files(self.folder_dir)
-            self.folder_current_image_index = len(self.folder_images) - 1
+            self.update_folder_state()
 
-            self.image_path = self.get_image_path(self.folder_dir, self.folder_images[self.folder_current_image_index])
-            self.update_image()  # Call update_image function
+    def update_folder_state(self):
+        # Update the folder state
+        self.folder_images = self.get_sorted_image_files(self.folder_dir)
+        self.folder_current_image_index = 0  # Open the first (newest) image in the folder
+        self.image_path = self.get_image_path(self.folder_dir, self.folder_images[self.folder_current_image_index])
+        self.image = self.load_image(self.image_path)
 
     def load_image(self, file_path):
         return QPixmap(file_path)
