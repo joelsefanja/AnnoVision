@@ -73,15 +73,15 @@ class ImageDrawer(QMainWindow):
 
     def create_buttons(self):
         button_data = [
-            {"label": "Open image", "icon": "../icons/cursor.png", "slot": self.open_image_file},
-            {"label": "Open image folder", "icon": "../icons/cursor.png", "slot": self.open_image_folder},
+            {"label": "Open image", "icon": "../icons/open-image.png", "slot": self.open_image_file},
+            {"label": "Open image folder", "icon": "../icons/folder.png", "slot": self.open_image_folder},
             {"label": "Select", "icon": "../icons/cursor.png", "slot": self.action_select},
             {"label": "Create", "icon": "../icons/box.png", "slot": self.action_create},
             {"label": "Label", "icon": "../icons/font.png", "slot": self.action_label},
             {"label": "Delete", "icon": "../icons/delete.png", "slot": self.action_delete},
-            {"label": "Predict", "icon": "../icons/predict.png", "slot": self.run_auto_annotate},
-            {"label": "Previous image", "icon": "", "slot": self.previous_image},
-            {"label": "Next image", "icon": "", "slot": self.next_image}
+            {"label": "Predict", "icon": "../icons/scan.png", "slot": self.run_auto_annotate},
+            {"label": "Previous image", "icon": "../icons/back.png", "slot": self.previous_image},
+            {"label": "Next image", "icon": "../icons/next.png", "slot": self.next_image}
         ]
 
         self.buttons = []
@@ -94,6 +94,15 @@ class ImageDrawer(QMainWindow):
             if icon:
                 button.setIcon(QIcon(icon))
             button.clicked.connect(slot)
+
+            # Set padding and font size using style sheets
+            button.setStyleSheet("""
+                QPushButton {
+                    padding: 10px;
+                    font-size: 16px;
+                }
+            """)
+
             self.buttons.append(button)
 
     def create_toolbar(self):
