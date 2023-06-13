@@ -406,7 +406,7 @@ class ImageDrawer(QMainWindow):
 
     def run_auto_annotate(self):
         if self.image_path != None:
-            subprocess_command = f"python ../yolov7/detect.py --weights ../yolov7/yolov7-tiny.pt --conf 0.25 --nosave --save-txt --source {self.image_path} --name {self.image_path}"
+            subprocess_command = f"python ../yolo/detect.py --weights ../yolov7/yolov7-tiny.pt --conf 0.25 --nosave --save-txt --source {self.image_path} --name {self.image_path}"
             subprocess.run(subprocess_command, shell=True)
             self.update_image()
         else:
