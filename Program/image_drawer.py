@@ -187,8 +187,8 @@ class ImageDrawer(QMainWindow):
             if len(self.preExistingAnnotations) > 0:
                 self.preExistingAnnotations.clear()
 
-            if (os.path.exists(os.path.abspath(os.path.join(image_dir, "labels", os.path.splitext(os.path.basename(image_path))[0] + ".txt")))):
-                label_path = os.path.abspath(os.path.join(image_dir, "labels", os.path.splitext(os.path.basename(image_path))[0] + ".txt"))
+            if (os.path.exists(os.path.abspath(os.path.join(image_dir, os.path.splitext(os.path.basename(image_path))[0] + ".txt")))):
+                label_path = os.path.abspath(os.path.join(image_dir, os.path.splitext(os.path.basename(image_path))[0] + ".txt"))
 
                 # Read the labels from the file
                 with open(label_path, 'r') as f:
@@ -348,10 +348,10 @@ class ImageDrawer(QMainWindow):
         self.currentAnnotation = None
 
         # Build the path to the current image
-        image_path = os.path.join(self.folder_dir, self.folder_images[self.folder_current_image_index])
+        # image_path = os.path.join(self.folder_dir, self.folder_images[self.folder_current_image_index])
 
         # Load the image and display it in the scene
-        self.image = QPixmap(image_path)
+        self.image = QPixmap(self.image_path)
         self.scene.clear()
         self.scene.addPixmap(self.image)
 
