@@ -110,26 +110,21 @@ class ImageDrawer(QMainWindow):
 
     def open_image_file(self, file_path):
         # Reset annotations
-        self.image_path = None
-        self.folder_dir = None
-        self.folder_images = []
-        self.folder_current_image_index = None
         self.preExistingAnnotations = []
         self.annotations = []
         self.currentAnnotation = None
 
         options = QFileDialog.Options()
-        self.image_path, _ = QFileDialog.getOpenFileName(self, "Open Image", "",
-                                                   "Image Files (*.png *.jpg *.jpeg)", options=options)
-        self.image = self.load_image(self.image_path)
-        self.resize_and_display_image()
+        file_path, _ = QFileDialog.getOpenFileName(self, "Open Image", "", "Image Files (*.png *.jpg *.jpeg)",
+                                                   options=options)
+
+        if file_path:
+            self.image_path = file_path
+            self.image = self.load_image(self.image_path)
+            self.resize_and_display_image()
 
     def open_image_folder(self):
         # Reset annotations
-        self.image_path = None
-        self.folder_dir = None
-        self.folder_images = []
-        self.folder_current_image_index = None
         self.preExistingAnnotations = []
         self.annotations = []
         self.currentAnnotation = None
