@@ -92,20 +92,22 @@ class Annotation():
         end.setX(min(image_width, end.x()))
         end.setY(min(image_height, end.y()))
 
-        # Update the start and end points with the calculated values
-        self.start_point = start
-        self.end_point = end
+        return start, end
 
     def draw(self, image_width, image_height):
-        # Calculate and update the points based on the mouse position
-        self.calculate_points(image_width, image_height)
+        # Calculate and update the points based on the final mouse position
+        start_point, end_point = self.calculate_points(image_width, image_height)
 
         # Update the rectangle and label with the current points
-        self.update_rect(self.start_point, self.end_point)
+        self.update_rect(start_point, end_point)
 
     def finish_drawing(self, image_width, image_height):
         # Calculate and update the points based on the final mouse position
-        self.calculate_points(image_width, image_height)
+        self.start_point, self.end_point = self.calculate_points(image_width, image_height)
 
         # Update the rectangle and label with the final points
         self.update_rect(self.start_point, self.end_point)
+
+
+
+
