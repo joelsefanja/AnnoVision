@@ -124,6 +124,13 @@ class ImageDrawer(QMainWindow):
             self.image_path = file_path
             self.image = self.load_image(self.image_path)
             self.update_image()  # Call update_image function
+            self.folder_dir = os.path.dirname(file_path)
+            self.folder_images = self.get_sorted_image_files(self.folder_dir)
+            self.folder_current_image_index = len(self.folder_images) - 1
+
+            self.image_path = self.get_image_path(self.folder_dir,
+                                                  self.folder_images[self.folder_current_image_index])
+            self.update_image()  # Call update_image function
 
     def open_image_folder(self):
         # Reset annotations
