@@ -230,28 +230,27 @@ class ImageDrawer(QMainWindow):
 
     def mouse_press_event(self, event):
         if event.button() == Qt.LeftButton and self.image and event.type() == event.GraphicsSceneMousePress:
-            if (self.action == 0):
+            if self.action == 0:
                 mouse_pos = event.scenePos()
 
-                self.currentAnnotation = None
-                annotations = []
-                for annotation in self.annotations:
-                    annotation.deselect()
-                    if (annotation.start_point.x() < mouse_pos.x() < annotation.end_point.x() and
-                            annotation.start_point.y() < mouse_pos.y() < annotation.end_point.y()):
-                        annotations.append(annotation)
+                # Find all annotations at the mouse position
+                annotations = [annotation for annotation in self.annotations if annotation.rect.contains(mouse_pos)]
 
-                if (annotations != []):
-                    if (annotations == self.possibleSelectAnnotations):
-                        self.selectedAnnotationIndex += 1
+                if annotations:
+                    if self.currentAnnotation in annotations:
+                        # If the current annotation is in the list of overlapping annotations,
+                        # move to the next one
+                        index = annotations.index(self.currentAnnotation)
+                        self.currentAnnotation.deselect()
+                        self.currentAnnotation = annotations[(index + 1) % len(annotations)]
+                        self.currentAnnotation.select()
                     else:
-                        self.selectedAnnotationIndex = 0
+                        # If the current annotation is not in the list of overlapping annotations,
+                        # select the first annotation from the list
+                        self.currentAnnotation = annotations[0]
+                        self.currentAnnotation.select()
 
-                    self.possibleSelectAnnotations = annotations
-                    self.currentAnnotation = self.possibleSelectAnnotations[self.selectedAnnotationIndex % len(self.possibleSelectAnnotations)]
-                    self.currentAnnotation.select()
-
-            if (self.action == 1):
+            if self.action == 1:
                 start_point = event.scenePos()
                 start_point.setX(round(start_point.x()))
                 start_point.setY(round(start_point.y()))
