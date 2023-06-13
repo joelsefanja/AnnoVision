@@ -1,6 +1,0 @@
-[submodule "yolov7"]
-	path = yolov7
-	url = https://github.com/WongKinYiu/yolov7.git
-[submodule "yolov7-segmentation"]
-	path = yolov7-segmentation
-	url = https://github.com/RizwanMunawar/yolov7-segmentation.git
