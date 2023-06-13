@@ -51,16 +51,6 @@ class ImageDrawer(QMainWindow):
         self.currentAnnotation = None
         self.possibleSelectAnnotations = []
         self.selectedAnnotationIndex = 0
-    def create_menu_bar(self):
-        open_action = QAction("Open Image (Crtl + O)", self)
-        open_action.triggered.connect(self.open_image_file)
-        open_action2 = QAction("Open Folder", self)
-        open_action2.triggered.connect(self.open_image_folder)
-
-        menu_bar = self.menuBar()
-        file_menu = menu_bar.addMenu("File")
-        file_menu.addAction(open_action)
-        file_menu.addAction(open_action2)
 
     def connect_mouse_events(self):
         self.scene.mousePressEvent = self.mouse_press_event
@@ -134,7 +124,7 @@ class ImageDrawer(QMainWindow):
         self.image = self.load_image(self.image_path)
         self.resize_and_display_image()
 
-    def open_image_folder(self, folder_path):
+    def open_image_folder(self):
         # Reset annotations
         self.image_path = None
         self.folder_dir = None
@@ -145,13 +135,16 @@ class ImageDrawer(QMainWindow):
         self.currentAnnotation = None
 
         options = QFileDialog.Options()
-        self.folder_dir = QFileDialog.getExistingDirectory(self, 'Select Folder')
-        self.folder_images = self.get_sorted_image_files(self.folder_dir)
-        self.folder_current_image_index = 0
+        folder_dir = QFileDialog.getExistingDirectory(self, 'Select Folder')
 
-        self.image_path = os.path.join(self.folder_dir, self.folder_images[self.folder_current_image_index])
+        if folder_dir:
+            self.folder_dir = folder_dir
+            self.folder_images = self.get_sorted_image_files(self.folder_dir)
+            self.folder_current_image_index = len(self.folder_images) - 1
 
-        self.update_image()
+            self.image_path = self.get_image_path(self.folder_dir, self.folder_images[self.folder_current_image_index])
+
+            self.update_image()
 
     def load_image(self, file_path):
         return QPixmap(file_path)
