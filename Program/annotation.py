@@ -19,6 +19,7 @@ class Annotation():
         # By default all walls are locked (Doesn't affect drawing of annotation)
         # Walls are unlocked for the resize function where it does affect drawing
         self.lock_left = self.lock_right = self.lock_up = self.lock_down = True
+        self.moving = False
 
         # Store the label of the annotation
         self.label = label
@@ -69,6 +70,20 @@ class Annotation():
         self.text.setHtml(f"<div style='color: white; background-color: red;'>{self.label}</div>")
 
     def calculate_points(self, image_width, image_height):
+        if self.moving:
+            # Calculate the width and height based on the mouse position
+            end_point_mouse = QCursor.pos()
+            total_mouse = end_point_mouse - self.start_point_mouse
+            self.width = self.end_point.x() - self.start_point.x()
+            self.height = self.end_point.y() - self.start_point.y()
+
+            startX = int(min(max(self.start_point.x() + total_mouse.x(), 0), image_width - self.width))
+            endX = int(max(min(self.end_point.x() + total_mouse.x(), image_width), self.width))
+            startY = int(min(max(self.start_point.y() + total_mouse.y(), 0), image_height - self.height))
+            endY = int(max(min(self.end_point.y() + total_mouse.y(), image_height), self.height))
+
+            return QPoint(startX, startY), QPoint(endX, endY)
+
         # Calculate the width and height based on the mouse position
         end_point_mouse = QCursor.pos()
         total_mouse = end_point_mouse - self.start_point_mouse
@@ -120,6 +135,8 @@ class Annotation():
 
         # Lock all walls (only important for resizing)
         self.lock_left = self.lock_right = self.lock_up = self.lock_down = True
+        self.width = self.end_point.x() - self.start_point.x()
+        self.height = self.end_point.y() - self.start_point.y()
 
         # Update the rectangle and label with the final points
         self.update_rect(self.start_point, self.end_point)

@@ -41,7 +41,7 @@ class ImageDrawer(QMainWindow):
     def initialize_variables(self):
         self.image = None
         self.line_label = None
-        self.action = 0  # 0 select   1 create   2 edit   3 delete   4 resize
+        self.action = 0  # 0 select   1 create   2 edit   3 delete   4 resize   5 move
         self.image_path = None
         self.folder_dir = None
         self.folder_images = []
@@ -49,6 +49,7 @@ class ImageDrawer(QMainWindow):
         self.preExistingAnnotations = []
         self.annotations = []
         self.currentAnnotation = None
+        self.currentMultiAnnotations = []
         self.possibleSelectAnnotations = []
         self.selectedAnnotationIndex = 0
 
@@ -68,6 +69,7 @@ class ImageDrawer(QMainWindow):
             {"label": "Select", "icon": "../icons/cursor.png", "slot": self.action_select},
             {"label": "Create", "icon": "../icons/box.png", "slot": self.action_create},
             {"label": "Resize", "icon": "../icons/box.png", "slot": self.action_resize},
+            {"label": "Move", "icon": "../icons/box.png", "slot": self.action_move},
             {"label": "Label", "icon": "../icons/font.png", "slot": self.action_label},
             {"label": "Delete", "icon": "../icons/delete.png", "slot": self.action_delete},
             {"label": "Predict", "icon": "../icons/scan.png", "slot": self.run_auto_annotate},
@@ -204,10 +206,13 @@ class ImageDrawer(QMainWindow):
 
                     # Draw the bounding box on the image
                     self.currentAnnotation = Annotation(QPoint(x1, y1), QPoint(x2, y2))
+                    self.currentAnnotation.deselect()
 
                     self.annotations.append(self.currentAnnotation)
                     self.scene.addItem(self.currentAnnotation.rect)
                     self.scene.addItem(self.currentAnnotation.text)
+
+                self.currentAnnotation = None
 
     def wheelEvent(self, event):
         if event.modifiers() == Qt.ControlModifier:
@@ -226,6 +231,10 @@ class ImageDrawer(QMainWindow):
                 # Find all annotations at the mouse position
                 annotations = [annotation for annotation in self.annotations if annotation.rect.contains(mouse_pos)]
 
+                if self.currentMultiAnnotations:
+                    for anno in self.currentMultiAnnotations:
+                        anno.deselect()
+                    self.currentMultiAnnotations = []
                 if self.currentAnnotation:
                     self.currentAnnotation.deselect()
 
@@ -245,6 +254,10 @@ class ImageDrawer(QMainWindow):
                     self.currentAnnotation = None
 
             if self.action == 1:
+                if self.currentMultiAnnotations:
+                    for anno in self.currentMultiAnnotations:
+                        anno.deselect()
+                    self.currentMultiAnnotations = []
                 if self.currentAnnotation:
                     self.currentAnnotation.deselect()
 
@@ -275,6 +288,14 @@ class ImageDrawer(QMainWindow):
                         self.drawing_annotation()
                         self.timer.start(16)
 
+            if self.action == 5:
+                if self.currentAnnotation:
+                    mouse_pos = event.scenePos()
+                    self.currentAnnotation.moving = True
+                    self.currentAnnotation.start_point_mouse = QCursor.pos()
+                    self.drawing_annotation()
+                    self.timer.start(16)
+
     def mouse_release_event(self, event):
         if event.button() == Qt.LeftButton and self.image:
             if self.action == 1: # Create
@@ -291,6 +312,12 @@ class ImageDrawer(QMainWindow):
                     if not self.currentAnnotation.lock_left == self.currentAnnotation.lock_right == self.currentAnnotation.lock_up == self.currentAnnotation.lock_down == True:
                         self.timer.stop()
                         self.currentAnnotation.finish_drawing(self.image.width(), self.image.height())
+
+            if self.action == 5: # Move
+                if self.currentAnnotation:
+                    self.timer.stop()
+                    self.currentAnnotation.finish_drawing(self.image.width(), self.image.height())
+                    self.currentAnnotation.moving = False
 
     def key_press_event(self, event):
         if event.key() == Qt.Key_Left:
@@ -326,6 +353,10 @@ class ImageDrawer(QMainWindow):
                 self.previous_image()
             elif event.key() == Qt.Key_Right:
                 self.next_image()
+            elif event.key() == Qt.Key_A:
+                self.currentMultiAnnotations = self.annotations[:]
+                for anno in self.currentMultiAnnotations:
+                    anno.select()
         else:
             if event.key() == Qt.Key_Left:
                 self.previous_image()
@@ -349,13 +380,16 @@ class ImageDrawer(QMainWindow):
     def action_resize(self):
         self.action = 4
 
+    def action_move(self):
+        self.action = 5
+
     def action_label(self):
         self.action = 2
-        if (self.currentAnnotation != None and self.line_label == None):
+        if ((self.currentAnnotation != None or self.currentMultiAnnotations) and self.line_label == None):
             self.line_label = QLineEdit(self)
             self.line_label.move(int(self.width() / 2), int(self.height() / 2))
             self.line_label.resize(80, 20)
-            self.line_label.setPlaceholderText(self.currentAnnotation.label)
+            self.line_label.setPlaceholderText("")
             self.line_label.editingFinished.connect(self.close_line_label)
             self.line_label.show()
 
@@ -366,6 +400,11 @@ class ImageDrawer(QMainWindow):
             self.scene.removeItem(anno.rect)
             self.scene.removeItem(anno.text)
             self.currentAnnotation = None
+        if (self.currentMultiAnnotations):
+            for anno in self.currentMultiAnnotations:
+                self.scene.removeItem(anno.rect)
+                self.scene.removeItem(anno.text)
+            self.currentMultiAnnotations = []
 
     def update_image(self):
         # Reset annotations
@@ -417,10 +456,16 @@ class ImageDrawer(QMainWindow):
     def close_line_label(self):
         if (self.line_label != None and self.currentAnnotation != None):
             self.currentAnnotation.label = self.line_label.text()
-            self.currentAnnotation.deselect()
+            self.currentAnnotation.select()
             self.line_label.close()
             self.line_label = None
-            self.currentAnnotation = None
+        if (self.line_label != None and self.currentMultiAnnotations):
+            for anno in self.currentMultiAnnotations:
+                anno.label = self.line_label.text()
+                anno.deselect()
+            self.line_label.close()
+            self.line_label = None
+            self.currentMultiAnnotations = []
 
     def drawing_annotation(self):
         self.currentAnnotation.draw(self.image.width(), self.image.height())
