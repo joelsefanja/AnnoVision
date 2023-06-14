@@ -16,6 +16,10 @@ class Annotation():
         self.width = None
         self.height = None
 
+        # By default all walls are locked (Doesn't affect drawing of annotation)
+        # Walls are unlocked for the resize function where it does affect drawing
+        self.lock_left = self.lock_right = self.lock_up = self.lock_down = True
+
         # Store the label of the annotation
         self.label = label
 
@@ -23,7 +27,7 @@ class Annotation():
         self.start_point_mouse = QCursor.pos()
 
         # Set the pen properties for the rectangle
-        self.pen = QPen(Qt.red)
+        self.pen = QPen(Qt.green)
         self.pen.setWidth(2)
         self.rect.setPen(self.pen)
 
@@ -44,7 +48,7 @@ class Annotation():
         self.text.setPos(start_point.x() - 5, start_point.y() - 16)
 
         # Update the label text and style
-        self.text.setHtml(f"<div style='color: white; background-color: red;'>{self.label}</div>")
+        self.text.setHtml(f"<div style='color: white; background-color: green;'>{self.label}</div>")
 
     def select(self):
         # Change the pen color to green to indicate selection
@@ -71,20 +75,29 @@ class Annotation():
         self.width = total_mouse.x()
         self.height = total_mouse.y()
 
-        # Calculate the updated end point based on the width and height
-        self.end_point = QPoint(int(self.start_point.x() + self.width), int(self.start_point.y() + self.height))
+        if self.lock_left and self.lock_right and self.lock_up and self.lock_down:
+            # Calculate the updated end point based on the width and height
+            self.end_point = QPoint(int(self.start_point.x() + self.width), int(self.start_point.y() + self.height))
 
         # Calculate the updated start and end points for proper orientation
         start = QPoint(int(self.start_point.x()), int(self.start_point.y()))
         end = QPoint(int(self.end_point.x()), int(self.end_point.y()))
 
-        if self.width < 0:
-            start.setX(self.end_point.x())
-            end.setX(int(self.start_point.x()))
+        if not self.lock_left: start.setX(start.x() + self.width)
+        if not self.lock_right: end.setX(end.x() + self.width)
+        if not self.lock_up: start.setY(start.y() + self.height)
+        if not self.lock_down: end.setY(end.y() + self.height)
 
-        if self.height < 0:
-            start.setY(self.end_point.y())
-            end.setY(int(self.start_point.y()))
+        temp_start = QPoint(int(start.x()), int(start.y()))
+        temp_end = QPoint(int(end.x()), int(end.y()))
+
+        if start.x() > end.x():
+            start.setX(temp_end.x())
+            end.setX(int(temp_start.x()))
+
+        if start.y() > end.y():
+            start.setY(temp_end.y())
+            end.setY(int(temp_start.y()))
 
         # Clamp the start and end points within the image bounds
         start.setX(max(0, start.x()))
@@ -104,6 +117,9 @@ class Annotation():
     def finish_drawing(self, image_width, image_height):
         # Calculate and update the points based on the final mouse position
         self.start_point, self.end_point = self.calculate_points(image_width, image_height)
+
+        # Lock all walls (only important for resizing)
+        self.lock_left = self.lock_right = self.lock_up = self.lock_down = True
 
         # Update the rectangle and label with the final points
         self.update_rect(self.start_point, self.end_point)
