@@ -109,40 +109,43 @@ class ImageDrawer(QMainWindow):
         image_label.setStyleSheet("background-color: white; border: none;")
         return image_label
 
-    def open_image_file(self, file_path):
-        # Reset annotations
-        self.image_path = None
-        self.folder_dir = None
-        self.folder_images = []
-        self.folder_current_image_index = None
+    def reset_annotations(self):
+        # Reset the annotations
         self.preExistingAnnotations = []
         self.annotations = []
         self.currentAnnotation = None
 
-        options = QFileDialog.Options()
-        self.image_path, _ = QFileDialog.getOpenFileName(self, "Open Image", "",
-                                                   "Image Files (*.png *.jpg *.jpeg)", options=options)
-        self.image = self.load_image(self.image_path)
-        self.resize_and_display_image()
-
-    def open_image_folder(self, folder_path):
-        # Reset annotations
-        self.image_path = None
-        self.folder_dir = None
-        self.folder_images = []
-        self.folder_current_image_index = None
-        self.preExistingAnnotations = []
-        self.annotations = []
-        self.currentAnnotation = None
+    def open_image_file(self):
+        # Reset annotations when opening an image file
+        self.reset_annotations()
 
         options = QFileDialog.Options()
-        self.folder_dir = QFileDialog.getExistingDirectory(self, 'Select Folder')
+        file_path, _ = QFileDialog.getOpenFileName(self, "Open Image", "", "Image Files (*.png *.jpg *.jpeg)",
+                                                   options=options)
+
+        if file_path:
+            self.folder_dir = os.path.dirname(file_path)
+            self.update_folder_state()
+            self.image_path = file_path
+            self.update_image()  # Call update_image function
+
+    def open_image_folder(self):
+        # Reset annotations when opening an image folder
+        self.reset_annotations()
+
+        options = QFileDialog.Options()
+        folder_dir = QFileDialog.getExistingDirectory(self, 'Select Folder')
+
+        if folder_dir:
+            self.folder_dir = folder_dir
+            self.update_folder_state()
+
+    def update_folder_state(self):
+        # Update the folder state
         self.folder_images = self.get_sorted_image_files(self.folder_dir)
-        self.folder_current_image_index = 0
-
-        self.image_path = os.path.join(self.folder_dir, self.folder_images[self.folder_current_image_index])
-
-        self.update_image()
+        self.folder_current_image_index = 0  # Open the first (newest) image in the folder
+        self.image_path = self.get_image_path(self.folder_dir, self.folder_images[self.folder_current_image_index])
+        self.image = self.load_image(self.image_path)
 
     def load_image(self, file_path):
         return QPixmap(file_path)
@@ -293,46 +296,44 @@ class ImageDrawer(QMainWindow):
                         self.currentAnnotation.finish_drawing(self.image.width(), self.image.height())
 
     def key_press_event(self, event):
-        if event.key() == Qt.Key_S and event.modifiers() == Qt.ControlModifier:
-            self.action = 0
-            if self.currentAnnotation:
-                self.currentAnnotation.deselect()
-        if event.key() == Qt.Key_C and event.modifiers() == Qt.ControlModifier:
-            self.action = 1
-            if self.currentAnnotation:
-                self.currentAnnotation.deselect()
-        if event.key() == Qt.Key_E and event.modifiers() == Qt.ControlModifier:
-            self.action = 2
-            if self.currentAnnotation is not None and self.line_label is None:
-                self.line_label = QLineEdit(self)
-                self.line_label.move(int(self.width() / 2), int(self.height() / 2))
-                self.line_label.resize(80, 20)
-                self.line_label.setPlaceholderText(self.currentAnnotation.label)
-                self.line_label.editingFinished.connect(self.close_line_label)
-                self.line_label.show()
-        if event.key() == Qt.Key_D and event.modifiers() == Qt.ControlModifier:
-            self.action = 3
-            if self.currentAnnotation is not None:
-                anno = self.annotations.pop(self.annotations.index(self.currentAnnotation))
-                self.scene.removeItem(anno.rect)
-                self.scene.removeItem(anno.text)
-                self.currentAnnotation = None
-        if event.key() == Qt.Key_R and event.modifiers() == Qt.ControlModifier:
-            self.action = 4
-        if event.key() == Qt.Key_O and event.modifiers() == Qt.ControlModifier:
-            self.open_image()
-        # Zoom out with "[" key
-        if event.key() == Qt.Key_BracketLeft and event.modifiers() == Qt.ControlModifier:
-            self.zoom_out()
-        # Zoom in with "]" key
-        if event.key() == Qt.Key_BracketRight and event.modifiers() == Qt.ControlModifier:
-            self.zoom_in()
-        # Zoom in with "+" key
-        if event.key() == Qt.Key_Equal:
-            self.zoom_in()
-        # Zoom out with "-" key
-        if event.key() == Qt.Key_Minus:
-            self.zoom_out()
+        if event.key() == Qt.Key_Left:
+            self.previous_image()
+        elif event.key() == Qt.Key_Right:
+            self.next_image()
+        else:
+            super().keyPressEvent(event)
+        if event.modifiers() == Qt.ControlModifier:
+            if event.key() == Qt.Key_S:
+                self.set_action(0)
+            elif event.key() == Qt.Key_C:
+                self.set_action(1)
+            elif event.key() == Qt.Key_E:
+                self.set_action(2)
+                self.handle_edit_action()
+            elif event.key() == Qt.Key_D:
+                self.set_action(3)
+                self.handle_delete_action()
+            elif event.key() == Qt.Key_O:
+                self.open_image_file()
+            elif event.key() == Qt.Key_BracketLeft:
+                self.zoom_out()
+            elif event.key() == Qt.Key_BracketRight:
+                self.zoom_in()
+            elif event.key() == Qt.Key_Equal:
+                self.zoom_in()
+            elif event.key() == Qt.Key_Minus:
+                self.zoom_out()
+            elif event.key() == Qt.Key_F:
+                self.open_image_folder()
+            elif event.key() == Qt.Key_Left:
+                self.previous_image()
+            elif event.key() == Qt.Key_Right:
+                self.next_image()
+        else:
+            if event.key() == Qt.Key_Left:
+                self.previous_image()
+            elif event.key() == Qt.Key_Right:
+                self.next_image()
 
     def zoom_in(self):
         if self.image:
