@@ -1,8 +1,9 @@
-import subprocess, os
+import datetime, json, shutil, subprocess, os
+from pycocotools.coco import COCO
 from enum import Enum
 from annotation import Annotation
 from PyQt5.QtWidgets import QApplication, QMainWindow, QGraphicsView, QGraphicsScene, QAction, \
-    QFileDialog, QPushButton, QLabel, QLineEdit
+    QFileDialog, QPushButton, QLabel, QLineEdit, QMessageBox
 from PyQt5.QtGui import QPixmap, QIcon, QCursor
 from PyQt5.QtCore import Qt, QTimer, QPoint
 
@@ -73,6 +74,7 @@ class ImageDrawer(QMainWindow):
             {"label": "Label", "icon": "../icons/font.png", "slot": self.action_label},
             {"label": "Delete", "icon": "../icons/delete.png", "slot": self.action_delete},
             {"label": "Predict", "icon": "../icons/scan.png", "slot": self.run_auto_annotate},
+            {"label": "Save to COCO", "icon": "../icons/box.png", "slot": self.save_to_COCO},
             {"label": "Previous image", "icon": "../icons/back.png", "slot": self.previous_image},
             {"label": "Next image", "icon": "../icons/next.png", "slot": self.next_image}
         ]
@@ -155,6 +157,24 @@ class ImageDrawer(QMainWindow):
                        if any(file.endswith(ext) for ext in included_extensions)]
         return image_files
 
+    def get_label_file(self, folder_path):
+        if self.image_path:
+            image_files = self.get_sorted_image_files(self.folder_dir)
+            image_file = os.path.normpath(self.image_path)
+            image_file = image_file.replace("\\", "/")
+            image_file = image_file.split(fr"{folder_path}/")[1]
+            for image in image_files:
+                if image_file == image:
+                    label_file = image_file.split(".")[0] + ".txt"
+                    label_file = os.path.join(folder_path, label_file)
+            if os.path.exists(label_file):
+                    return label_file
+            else:
+                with open(label_file, 'w') as file:
+                    pass
+                return label_file
+
+
     def get_image_path(self, folder_path, image_file):
         return os.path.join(folder_path, image_file)
 
@@ -171,48 +191,226 @@ class ImageDrawer(QMainWindow):
         self.scene.addPixmap(self.image)
 
         if self.image_path:
-            self.read_labels(self.image_path)
+            self.read_labels()
 
-    def read_labels(self, image_path):
-        image_dir = os.path.abspath(os.path.join(os.path.abspath(image_path), os.pardir))
-        if image_path.endswith('.jpg') or image_path.endswith('.png') or image_path.endswith('.jpeg'):
-            # Clear the list if another image is opened
-            if len(self.preExistingAnnotations) > 0:
-                self.preExistingAnnotations.clear()
+    def read_labels(self):
+        global image_path
+        label_path = self.get_label_file(self.folder_dir)
 
-            if (os.path.exists(os.path.abspath(os.path.join(image_dir, os.path.splitext(os.path.basename(image_path))[0] + ".txt")))):
-                label_path = os.path.abspath(os.path.join(image_dir, os.path.splitext(os.path.basename(image_path))[0] + ".txt"))
+        # Read the labels from the file
+        with open(label_path, 'r') as f:
+            lines = f.readlines()
 
-                # Read the labels from the file
-                with open(label_path, 'r') as f:
-                    lines = f.readlines()
+        # Read the labels.py file containing all class names and put it into a dictionary.
+        file_path = r"..\yolo\deploy\triton-inference-server\labels.py"
 
-                # Process each line in the label file
-                for line in lines:
-                    line = line.strip().split()
+        with open(file_path, 'r') as file:
+            labels_from_file = [line.strip() for line in file.readlines()[3:]]
+
+        labels_dict = {}
+
+        for index, label in enumerate(labels_from_file):
+            labels_dict[label] = index
+
+        # Process each line in the label file
+        for line in lines:
+            line = line.strip().split()
+            if all(character.isdigit() for character in line[0]):
+                # Access name and value of each label from the dictionary
+                for label, value in labels_dict.items():
                     class_id = int(line[0])
-                    x, y, w, h = map(float, line[1:5])
-                    class_name = 'test'  # names[class_id]  # assuming you have loaded the class names
-                    color = 1  # colors[class_id]  # assuming you have loaded the colors
-                    self.preExistingAnnotations.append([class_id, class_name, color, x, y, w, h])
+                    if class_id == value:
+                        class_name = label.replace(f' = {class_id}', '')
+                        break
+                x, y, w, h = map(float, line[1:5])
+            else:
+                first_string = ""
+                # Combine consecutive string elements until an integer is encountered
+                for element in line:
+                    if element.isalpha():
+                        # Add the element to the first_string
+                        first_string += element + ' '
+                    else:
+                        # Stop adding to the first_string and start separating the integers
+                        break
 
-                for annotation in self.preExistingAnnotations:
-                    img_h = int(self.image.height())
-                    img_w = int(self.image.width())
-                    x1 = int((annotation[3] - annotation[5] / 2) * img_w)
-                    y1 = int((annotation[4] - annotation[6] / 2) * img_h)
-                    x2 = int((annotation[3] + annotation[5] / 2) * img_w)
-                    y2 = int((annotation[4] + annotation[6] / 2) * img_h)
+                # Remove trailing whitespace from first_string
+                first_string = first_string.strip()
 
-                    # Draw the bounding box on the image
-                    self.currentAnnotation = Annotation(QPoint(x1, y1), QPoint(x2, y2))
-                    self.currentAnnotation.deselect()
+                # Process the remaining elements as separate lines
+                additional_lines = line[len(first_string.split()):]
 
-                    self.annotations.append(self.currentAnnotation)
-                    self.scene.addItem(self.currentAnnotation.rect)
-                    self.scene.addItem(self.currentAnnotation.text)
+                class_id = "Not in COCO dataset"
+                class_name = first_string
 
-                self.currentAnnotation = None
+                x, y, w, h = map(float, additional_lines[0:4])
+
+            img_h = int(self.image.height())
+            img_w = int(self.image.width())
+            x1 = int((x - w / 2) * img_w)
+            y1 = int((y - h / 2) * img_h)
+            x2 = int((x + w / 2) * img_w)
+            y2 = int((y + h / 2) * img_h)
+
+            # Add the annotation to the class and draw the item.
+            self.currentAnnotation = Annotation(QPoint(x1, y1), QPoint(x2, y2), class_id, class_name)
+
+            self.annotations.append(self.currentAnnotation)
+            self.scene.addItem(self.currentAnnotation.rect)
+            self.scene.addItem(self.currentAnnotation.text)
+
+    def modify_txt_file(self):
+        global image_path
+        # image_path = self.get_image_path()
+        label_path = self.get_label_file(self.folder_dir)
+        # image_dir = os.path.abspath(os.path.join(os.path.abspath(image_path), os.pardir))
+        # label_path = os.path.abspath(os.path.join(image_dir, os.path.splitext(os.path.basename(image_path))[0] + ".txt"))
+        image_width = int(self.image.width())
+        image_height = int(self.image.height())
+
+        if len(self.annotations) == 0:
+            self.read_labels()
+
+        # Clear the .txt file, so it can be overwritten.
+        with open(label_path, 'w') as file:
+            pass
+
+        # Modify the annotations as needed
+        for annotation in self.annotations:
+
+            # Convert the coordinates back to YoloV7 format
+            x = (annotation.start_point.x() + annotation.end_point.x()) / (2 * image_width)
+            y = (annotation.start_point.y() + annotation.end_point.y()) / (2 * image_height)
+            w = (annotation.end_point.x() - annotation.start_point.x()) / image_width
+            h = (annotation.end_point.y() - annotation.start_point.y()) / image_height
+
+            # Write the old + new annotations to the .txt file
+            with open(label_path, 'a') as file:
+                if isinstance(annotation.label_id, str):
+                    line = f"{annotation.label} {x} {y} {w} {h}\n"
+                    file.write(line)
+                else:
+                    line = f"{annotation.label_id} {x} {y} {w} {h}\n"
+                    file.write(line)
+
+    def save_to_COCO(self):
+        image_path = self.image_path
+        # This prevents the button activating the image if there currently is no image loaded.
+        if image_path is not None:
+            # Assign the necessary variables for the COCO dataset.
+            image_width = int(self.image.width())
+            image_height = int(self.image.height())
+            image_id = 0
+            annotation_id = 0
+            area = image_width * image_height
+            segmentation = "Bounding Box"
+
+            # Construct the file paths
+            current_directory = os.getcwd()
+            parent_directory = os.path.dirname(current_directory)
+            COCO_images = os.path.join(parent_directory, 'COCO', 'Images')
+            COCO_annotations = os.path.join(parent_directory, 'COCO', 'Annotations')
+
+            # Check if the directories exists and determine the image_id, if not then create the directory
+            if os.path.exists(COCO_images):
+                for item in os.listdir(COCO_images):
+                    item_path = os.path.join(COCO_annotations, item)
+                    if item_path:
+                        image_id += 1
+            else:
+                directory = COCO_annotations
+                os.makedirs(directory, exist_ok=True)
+                directory = COCO_images
+                os.makedirs(directory, exist_ok=True)
+
+            # Create an empty COCO object
+            coco = COCO()
+
+            # Create the dataset and write to it
+            coco.dataset = {
+                "images": [],
+                "annotations": [],
+                "categories": []
+            }
+
+            images = {
+                "id": image_id,
+                "width": image_width,
+                "height": image_height,
+                "file_name": image_path
+            }
+            coco.dataset["images"].append(images)
+
+            for annotation in self.annotations:
+                x1 = annotation.start_point.x()
+                y1 = annotation.start_point.y()
+                x2 = annotation.end_point.x()
+                y2 = annotation.end_point.y()
+                category_id = annotation.label_id
+                category_name = annotation.label
+
+                annotation = {
+                    "id": annotation_id,
+                    "image_id": image_id,
+                    "category_id": category_id,
+                    "category_name": category_name,
+                    "segmentation": segmentation,
+                    "bbox": (x1, y1, x2, y2),
+                    "area": area,
+                }
+                coco.dataset["annotations"].append(annotation)
+                annotation_id += 1
+
+            for annotation in self.annotations:
+                id = annotation.label_id
+                name = annotation.label
+
+                # Prevents duplicates from being written in the file.
+                if any(category['name'] == name for category in coco.dataset["categories"]):
+                    continue
+
+                category = {
+                    "id": id,
+                    "name": name,
+                }
+                coco.dataset["categories"].append(category)
+
+            # Create a timestamp for each json file.
+            timestamp = datetime.datetime.now().strftime("%Y%m%d%H%M%S")
+
+            # Save the dataset to a json file
+            annotation_file = os.path.join(COCO_annotations, f'Annotations_{timestamp}.json')
+            with open(annotation_file, 'w') as json_file:
+                json.dump(coco.dataset, json_file, indent=4)
+
+            # Save the image to the COCO\Images folder
+            image_type = self.get_image_type()
+            image_name = f'{image_id}{image_type}'
+            save_path = os.path.join(COCO_images, image_name)
+            shutil.copy2(image_path, save_path)
+
+            # Confirmation of the process being completed.
+            # Also prevents the function from being activated multiple times through spam
+            msg_box = QMessageBox()
+            msg_box.setWindowTitle("Process completed")
+            msg_box.setText("The current image's annotations are saved to COCO!"
+                            "\n The location of the COCO annotations and images are saved at:"
+                            f"\n {parent_directory}\COCO")
+            msg_box.exec_()
+
+        else:
+            # No image_path returns false.
+            return 'false'
+
+    def get_image_type(self):
+        # Checks the filetype of the current image, so that it can be saved in the same format.
+        file_extension = os.path.splitext(self.image_path)[1].lower()
+        if file_extension == '.jpg' or file_extension == '.jpeg':
+            return '.jpeg'
+        elif file_extension == '.png':
+            return '.png'
+        else:
+            return 'False'
 
     def wheelEvent(self, event):
         if event.modifiers() == Qt.ControlModifier:
@@ -434,6 +632,9 @@ class ImageDrawer(QMainWindow):
         if self.folder_current_image_index < 0:
             self.folder_current_image_index = len(self.folder_images) - 1
 
+        # Update the .txt annotations file
+        self.modify_txt_file()
+
         # Update the displayed image
         self.image_path = os.path.join(self.folder_dir, self.folder_images[self.folder_current_image_index])
         self.update_image()
@@ -448,6 +649,9 @@ class ImageDrawer(QMainWindow):
         # Wrap around to the first image if the index goes beyond the last image
         if self.folder_current_image_index >= len(self.folder_images):
             self.folder_current_image_index = 0
+
+        # Update the .txt annotations file
+        self.modify_txt_file()
 
         # Update the displayed image
         self.image_path = os.path.join(self.folder_dir, self.folder_images[self.folder_current_image_index])

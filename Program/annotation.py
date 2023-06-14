@@ -4,7 +4,7 @@ from PyQt5.QtCore import Qt, QRectF, QPoint
 
 
 class Annotation():
-    def __init__(self, start_point, end_point=None, label="Label"):
+    def __init__(self, start_point, end_point=None, label_id=0, label="Label"):
         # Create QGraphicsRectItem for the rectangle
         self.rect = QGraphicsRectItem()
 
@@ -22,6 +22,7 @@ class Annotation():
         self.moving = False
 
         # Store the label of the annotation
+        self.label_id = label_id
         self.label = label
 
         # Store the initial mouse position
@@ -51,6 +52,7 @@ class Annotation():
         # Update the label text and style
         self.text.setHtml(f"<div style='color: white; background-color: green;'>{self.label}</div>")
 
+
     def select(self):
         # Change the pen color to green to indicate selection
         self.pen.setColor(Qt.green)
@@ -60,6 +62,9 @@ class Annotation():
         self.update_rect(self.start_point, self.end_point)
         self.text.setHtml(f"<div style='color: white; background-color: green;'>{self.label}</div>")
 
+        # Check if the label exists in the labels.py folder and assign the necessary label identification.
+        self.check_label_id()
+
     def deselect(self):
         # Change the pen color back to red to indicate deselection
         self.pen.setColor(Qt.red)
@@ -68,6 +73,9 @@ class Annotation():
         # Update the rectangle and label with the current points and deselected style
         self.update_rect(self.start_point, self.end_point)
         self.text.setHtml(f"<div style='color: white; background-color: red;'>{self.label}</div>")
+
+        # Check if the label exists in the labels.py folder and assign the necessary label identification.
+        self.check_label_id()
 
     def calculate_points(self, image_width, image_height):
         if self.moving:
@@ -141,6 +149,23 @@ class Annotation():
         # Update the rectangle and label with the final points
         self.update_rect(self.start_point, self.end_point)
 
+    def check_label_id(self):
+        file_path = r"..\yolo\deploy\triton-inference-server\labels.py"
 
+        with open(file_path, 'r') as file:
+            labels_from_file = [line.strip() for line in file.readlines()[3:]]
 
+        labels_dict = {}
+
+        for index, label in enumerate(labels_from_file):
+            labels_dict[label] = index
+
+        # Access name and value of each label from the dictionary
+        for label, value in labels_dict.items():
+            if self.label.upper() == label.split(' =')[0].strip():
+                self.label_id = int(label.split('= ')[1].strip())
+                self.label = self.label.upper()
+                break
+            if value == 79 and self.label.upper() != label.split(' =')[0].strip():
+              self.label_id = "Not included in the COCO dataset"
 
