@@ -145,10 +145,7 @@ class ImageDrawer(QMainWindow):
         self.folder_images = self.get_sorted_image_files(self.folder_dir)
         self.folder_current_image_index = 0  # Open the first (newest) image in the folder
         self.image_path = self.get_image_path(self.folder_dir, self.folder_images[self.folder_current_image_index])
-        self.image = self.load_image(self.image_path)
-
-    def load_image(self, file_path):
-        return QPixmap(file_path)
+        self.update_image()
 
     def get_sorted_image_files(self, folder_path):
         included_extensions = ['jpg', 'jpeg', 'png']
