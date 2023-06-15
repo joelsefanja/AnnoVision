@@ -750,6 +750,11 @@ class ImageDrawer(QMainWindow):
         self.line_label = None
         self.currentMultiAnnotations = []
 
+        font_size = '16px'  # Adjust the font size as desired
+        font_weight = 'bold'  # Set to 'bold' for bold text
+
+        self.setStyleSheet(f"QLineEdit {{ font-size: {font_size}; font-weight: {font_weight}; }}")
+
     def drawing_annotation(self):
         self.currentAnnotation.draw(self.image.width(), self.image.height())
         self.scene.addItem(self.currentAnnotation.rect)
@@ -757,7 +762,7 @@ class ImageDrawer(QMainWindow):
             self.enable_buttons(self.select_button + self.edit_annotation_buttons)
     def run_auto_annotate(self):
         if self.image_path != None:
-            subprocess_command = f"python ../yolov7/detect.py --weights ../yolov7/yolov7-tiny.pt --conf 0.25 --nosave --save-txt --source {self.image_path} --name {self.image_path}"
+            subprocess_command = f"python ../yolo/detect.py --weights ../yolov7/yolov7-tiny.pt --conf 0.25 --nosave --save-txt --source {self.image_path} --name {self.image_path}"
             subprocess.run(subprocess_command, shell=True)
             self.update_image()
         else:
