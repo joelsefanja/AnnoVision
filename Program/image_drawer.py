@@ -3,7 +3,7 @@ from pycocotools.coco import COCO
 from enum import Enum
 from annotation import Annotation
 from PyQt5.QtWidgets import QApplication, QMainWindow, QGraphicsView, QGraphicsScene, QAction, \
-    QFileDialog, QPushButton, QLabel, QLineEdit, QMessageBox, QInputDialog
+    QFileDialog, QPushButton, QLabel, QLineEdit, QMessageBox, QInputDialog,  QListWidget, QListWidgetItem, QVBoxLayout, QWidget
 from PyQt5.QtGui import QPixmap, QIcon, QCursor
 from PyQt5.QtCore import Qt, QTimer, QPoint
 
@@ -734,7 +734,6 @@ class ImageDrawer(QMainWindow):
 
     def close_line_label(self):
         new_label = self.line_label.text()
-
         if self.currentAnnotation is not None:
             self.currentAnnotation.label = new_label
             self.currentAnnotation.select()
@@ -753,7 +752,7 @@ class ImageDrawer(QMainWindow):
         font_size = '16px'  # Adjust the font size as desired
         font_weight = 'bold'  # Set to 'bold' for bold text
 
-        self.setStyleSheet(f"QLineEdit {{ font-size: {font_size}; font-weight: {font_weight}; }}")
+        self.setStyleSheet(f"QLineEdit {{ font-size: {font_size}; font-weight: {font_weight}; padding: 1rem; }}")
 
     def drawing_annotation(self):
         self.currentAnnotation.draw(self.image.width(), self.image.height())
