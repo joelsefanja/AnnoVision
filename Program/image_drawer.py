@@ -1,4 +1,4 @@
-import datetime, json, shutil, subprocess, os
+import datetime, json, shutil, subprocess, os, atexit
 from pycocotools.coco import COCO
 from enum import Enum
 from annotation import Annotation
@@ -28,6 +28,7 @@ class ImageDrawer(QMainWindow):
         self.create_buttons()
         self.create_toolbar()
         self.image_label = self.create_image_label()
+        atexit.register(self.remove_empty_files)
 
     def setup_ui(self):
         self.setWindowTitle("AnnoVision")
@@ -158,17 +159,20 @@ class ImageDrawer(QMainWindow):
         return image_files
 
     def get_label_file(self, folder_path):
+        os.makedirs(r"../annotations_save", exist_ok=True)
         if self.image_path:
-            image_files = self.get_sorted_image_files(self.folder_dir)
+             # Get the image name from it's path
             image_file = os.path.normpath(self.image_path)
             image_file = image_file.replace("\\", "/")
             image_file = image_file.split(fr"{folder_path}/")[1]
-            for image in image_files:
-                if image_file == image:
-                    label_file = image_file.split(".")[0] + ".txt"
-                    label_file = os.path.join(folder_path, label_file)
+            image_file = image_file.split(".")[0]
+
+            # Assign folder path
+            label_file = os.path.join(f"../annotations_save/{image_file}.txt")
+
+            # Check if the text file exists, if not create a text file to save the annotations to.
             if os.path.exists(label_file):
-                    return label_file
+                return label_file
             else:
                 with open(label_file, 'w') as file:
                     pass
@@ -194,7 +198,6 @@ class ImageDrawer(QMainWindow):
             self.read_labels()
 
     def read_labels(self):
-        global image_path
         label_path = self.get_label_file(self.folder_dir)
 
         # Read the labels from the file
@@ -260,11 +263,7 @@ class ImageDrawer(QMainWindow):
             self.scene.addItem(self.currentAnnotation.text)
 
     def modify_txt_file(self):
-        global image_path
-        # image_path = self.get_image_path()
         label_path = self.get_label_file(self.folder_dir)
-        # image_dir = os.path.abspath(os.path.join(os.path.abspath(image_path), os.pardir))
-        # label_path = os.path.abspath(os.path.join(image_dir, os.path.splitext(os.path.basename(image_path))[0] + ".txt"))
         image_width = int(self.image.width())
         image_height = int(self.image.height())
 
@@ -292,7 +291,6 @@ class ImageDrawer(QMainWindow):
                 else:
                     line = f"{annotation.label_id} {x} {y} {w} {h}\n"
                     file.write(line)
-
     def save_to_COCO(self):
         image_path = self.image_path
         # This prevents the button activating the image if there currently is no image loaded.
@@ -682,3 +680,19 @@ class ImageDrawer(QMainWindow):
             self.update_image()
         else:
             print("No image file selected.")
+
+    @staticmethod
+    def remove_empty_files():
+        path = "../annotations_save"
+        included_extensions = ['.txt']
+        label_files = [file for file in os.listdir(path)
+                       if any(file.endswith(ext) for ext in included_extensions)]
+
+        for file in label_files:
+            file_path = f"../annotations_save/{file}"
+            with open(file_path, 'r') as file:
+                contents = file.read()
+            if contents == "":
+                os.remove(file_path)
+
+        print("Executing remove_empty_files")
