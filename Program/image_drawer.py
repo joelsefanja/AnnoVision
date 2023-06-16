@@ -48,7 +48,6 @@ class ImageDrawer(QMainWindow):
         self.folder_dir = None
         self.folder_images = []
         self.folder_current_image_index = None
-        self.preExistingAnnotations = []
         self.annotations = []
         self.currentAnnotation = None
         self.currentMultiAnnotations = []
@@ -116,7 +115,6 @@ class ImageDrawer(QMainWindow):
 
     def reset_annotations(self):
         # Reset the annotations
-        self.preExistingAnnotations = []
         self.annotations = []
         self.currentAnnotation = None
 
@@ -604,7 +602,6 @@ class ImageDrawer(QMainWindow):
 
     def update_image(self):
         # Reset annotations
-        self.preExistingAnnotations = []
         self.annotations = []
         self.currentAnnotation = None
 
