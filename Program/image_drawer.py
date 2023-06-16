@@ -45,6 +45,7 @@ class ImageDrawer(QMainWindow):
         self.line_label = None
         self.action = 0  # 0 select   1 create   2 edit   3 delete   4 resize   5 move
         self.image_path = None
+        self.json_path = None
         self.folder_dir = None
         self.folder_images = []
         self.folder_current_image_index = None
@@ -115,6 +116,7 @@ class ImageDrawer(QMainWindow):
 
     def reset_annotations(self):
         # Reset the annotations
+        self.json_path = None
         self.annotations = []
         self.currentAnnotation = None
 
@@ -123,10 +125,19 @@ class ImageDrawer(QMainWindow):
         self.reset_annotations()
 
         options = QFileDialog.Options()
-        file_path, _ = QFileDialog.getOpenFileName(self, "Open Image", "", "Image Files (*.png *.jpg *.jpeg)",
+        file_path, _ = QFileDialog.getOpenFileName(self, "Open Image", "", "Image Files (*.png *.jpg *.jpeg)"
+                                                                           ";;JSON Files (*.json)",
                                                    options=options)
 
-        if file_path:
+        if os.path.splitext(file_path)[1].lower() == '.json':
+            self.json_path = file_path
+            with open(self.json_path, 'r') as json_file:
+                json_data = json.load(json_file)
+
+            self.image_path = json_data["images"][0]["file_name"]
+            self.image_path = self.image_path.replace("\\", "/")
+            self.update_image()  # Call update_image function
+        elif file_path:
             self.folder_dir = os.path.dirname(file_path)
             self.update_folder_state()
             self.image_path = file_path
@@ -194,6 +205,25 @@ class ImageDrawer(QMainWindow):
 
         if self.image_path:
             self.read_labels()
+
+    def read_coco_file(self):
+        with open(self.json_path, 'r') as json_file:
+            json_data = json.load(json_file)
+
+        coco_annotations = json_data['annotations']
+
+        for annotation in coco_annotations:
+            bbox = annotation["bbox"]
+            class_id = annotation["category_id"]
+            class_name = annotation["category_name"]
+
+            # Add the annotation to the class and draw the item.
+            self.currentAnnotation = Annotation(QPoint(bbox[0], bbox[1]), QPoint(bbox[2], bbox[3]), class_id, class_name)
+
+            self.annotations.append(self.currentAnnotation)
+            self.scene.addItem(self.currentAnnotation.rect)
+            self.scene.addItem(self.currentAnnotation.text)
+
 
     def read_labels(self):
         label_path = self.get_label_file(self.folder_dir)
@@ -290,71 +320,161 @@ class ImageDrawer(QMainWindow):
                     line = f"{annotation.label_id} {x} {y} {w} {h}\n"
                     file.write(line)
     def save_to_COCO(self):
-        image_path = self.image_path
-        # This prevents the button activating the image if there currently is no image loaded.
-        if image_path is not None:
-            # Assign the necessary variables for the COCO dataset.
-            image_width = int(self.image.width())
-            image_height = int(self.image.height())
-            image_id = 0
-            annotation_id = 0
-            area = image_width * image_height
-            segmentation = "Bounding Box"
+        if self.json_path is not None and os.path.exists(self.json_path):
+            self.modify_COCO_file()
+        else:
+            image_path = self.image_path
+            # This prevents the button activating the image if there currently is no image loaded.
+            if image_path is not None:
+                # Assign the necessary variables for the COCO dataset.
+                image_width = int(self.image.width())
+                image_height = int(self.image.height())
+                image_id = 0
+                annotation_id = 0
+                area = image_width * image_height
+                segmentation = "Bounding Box"
+                image_type = self.get_image_type()
+                timestamp = datetime.datetime.now().isoformat()
 
-            # Construct the file paths
-            current_directory = os.getcwd()
-            parent_directory = os.path.dirname(current_directory)
-            COCO_images = os.path.join(parent_directory, 'COCO', 'Images')
-            COCO_annotations = os.path.join(parent_directory, 'COCO', 'Annotations')
+                # Construct the file paths
+                current_directory = os.getcwd()
+                parent_directory = os.path.dirname(current_directory)
+                COCO_images = os.path.join(parent_directory, 'COCO', 'Images')
+                COCO_annotations = os.path.join(parent_directory, 'COCO', 'Annotations')
 
-            # Check if the directories exists and determine the image_id, if not then create the directory
-            if os.path.exists(COCO_images):
-                for item in os.listdir(COCO_images):
-                    item_path = os.path.join(COCO_annotations, item)
-                    if item_path:
-                        image_id += 1
+                # Check if the directories exists and determine the image_id, if not then create the directory
+                if os.path.exists(COCO_images):
+                    for item in os.listdir(COCO_images):
+                        item_path = os.path.join(COCO_annotations, item)
+                        if item_path:
+                            image_id += 1
+                else:
+                    directory = COCO_annotations
+                    os.makedirs(directory, exist_ok=True)
+                    directory = COCO_images
+                    os.makedirs(directory, exist_ok=True)
+
+                # Create an empty COCO object
+                coco = COCO()
+
+                # Create the dataset and write to it
+                coco.dataset = {
+                    "images": [],
+                    "annotations": [],
+                    "categories": []
+                }
+
+                images = {
+                    "id": image_id,
+                    "width": image_width,
+                    "height": image_height,
+                    "file_name": f"..\COCO\images\{image_id}{image_type}"
+                }
+                coco.dataset["images"].append(images)
+
+                for annotation in self.annotations:
+                    x1 = annotation.start_point.x()
+                    y1 = annotation.start_point.y()
+                    x2 = annotation.end_point.x()
+                    y2 = annotation.end_point.y()
+                    category_id = annotation.label_id
+                    category_name = annotation.label
+
+                    annotation = {
+                        "id": annotation_id,
+                        "image_id": image_id,
+                        "category_id": category_id,
+                        "category_name": category_name,
+                        "bbox": (x1, y1, x2, y2),
+                        "area": area,
+                        "metadata": {
+                            "annotation_date_created": timestamp,
+                            "annotation_date_modified": "None",
+                            "segmentation": segmentation
+                        }
+                    }
+                    coco.dataset["annotations"].append(annotation)
+                    annotation_id += 1
+
+                for annotation in self.annotations:
+                    id = annotation.label_id
+                    name = annotation.label
+
+                    # Prevents duplicates from being written in the file.
+                    if any(category['name'] == name for category in coco.dataset["categories"]):
+                        continue
+
+                    category = {
+                        "id": id,
+                        "name": name,
+                    }
+                    coco.dataset["categories"].append(category)
+
+                # Create a timestamp for each json file.
+                timestamp = datetime.datetime.now().strftime("%Y%m%d%H%M%S")
+
+                # Save the dataset to a json file
+                annotation_file = os.path.join(COCO_annotations, f'Annotations_{timestamp}.json')
+                with open(annotation_file, 'w') as json_file:
+                    json.dump(coco.dataset, json_file, indent=4)
+
+                # Save the image to the COCO\Images folder
+                image_name = f'{image_id}{image_type}'
+                save_path = os.path.join(COCO_images, image_name)
+                shutil.copy2(image_path, save_path)
+
+                # Confirmation of the process being completed.
+                # Also prevents the function from being activated multiple times through spam
+                msg_box = QMessageBox()
+                msg_box.setWindowTitle("Process completed")
+                msg_box.setText("The current image's annotations are saved to COCO!"
+                                "\n The location of the COCO annotations and images are saved at:"
+                                f"\n {parent_directory}\COCO")
+                msg_box.exec_()
+
             else:
-                directory = COCO_annotations
-                os.makedirs(directory, exist_ok=True)
-                directory = COCO_images
-                os.makedirs(directory, exist_ok=True)
+                # No image_path returns false.
+                return 'false'
 
-            # Create an empty COCO object
-            coco = COCO()
+    def modify_COCO_file(self):
+        # Check if the directories exists and determine the image_id, if not then create the directory
+        if not os.path.exists(r'..\COCO\Images') and not os.path.exists(r'..\COCO\Annotations'):
+            os.makedirs(r'..\COCO\Images', exist_ok=True)
+            os.makedirs(r'..\COCO\Annotations', exist_ok=True)
+        else:
+            # Read the JSON file and clear the old annotations and categories, so that the new ones can be written.
+            with open(self.json_path, 'r') as file:
+                json_data = json.load(file)
+                old_timestamp = json_data['annotations'][0]['metadata']['annotation_date_created']
+                json_data['annotations'].clear()
+                json_data['categories'].clear()
 
-            # Create the dataset and write to it
-            coco.dataset = {
-                "images": [],
-                "annotations": [],
-                "categories": []
-            }
+            with open(self.json_path, 'w') as file:
+                json.dump(json_data, file, indent=4)
 
-            images = {
-                "id": image_id,
-                "width": image_width,
-                "height": image_height,
-                "file_name": image_path
-            }
-            coco.dataset["images"].append(images)
+            timestamp = datetime.datetime.now().isoformat()
 
+            annotation_id = 0
             for annotation in self.annotations:
                 x1 = annotation.start_point.x()
                 y1 = annotation.start_point.y()
                 x2 = annotation.end_point.x()
                 y2 = annotation.end_point.y()
-                category_id = annotation.label_id
-                category_name = annotation.label
-
+                # Modify the necessary annotations in the data structure
                 annotation = {
                     "id": annotation_id,
-                    "image_id": image_id,
-                    "category_id": category_id,
-                    "category_name": category_name,
-                    "segmentation": segmentation,
+                    "image_id": json_data['images'][0]['id'],
+                    "category_id": annotation.label_id,
+                    "category_name": annotation.label,
                     "bbox": (x1, y1, x2, y2),
-                    "area": area,
+                    "area": json_data['images'][0]['width'] * json_data['images'][0]['height'],
+                    "metadata": {
+                        "annotation_date_created": old_timestamp,
+                        "annotation_date_modified": timestamp,
+                        "segmentation": "Bounding box"
+                    }
                 }
-                coco.dataset["annotations"].append(annotation)
+                json_data["annotations"].append(annotation)
                 annotation_id += 1
 
             for annotation in self.annotations:
@@ -362,41 +482,25 @@ class ImageDrawer(QMainWindow):
                 name = annotation.label
 
                 # Prevents duplicates from being written in the file.
-                if any(category['name'] == name for category in coco.dataset["categories"]):
+                if any(category['name'] == name for category in json_data["categories"]):
                     continue
 
                 category = {
                     "id": id,
                     "name": name,
                 }
-                coco.dataset["categories"].append(category)
+                json_data["categories"].append(category)
 
-            # Create a timestamp for each json file.
-            timestamp = datetime.datetime.now().strftime("%Y%m%d%H%M%S")
-
-            # Save the dataset to a json file
-            annotation_file = os.path.join(COCO_annotations, f'Annotations_{timestamp}.json')
-            with open(annotation_file, 'w') as json_file:
-                json.dump(coco.dataset, json_file, indent=4)
-
-            # Save the image to the COCO\Images folder
-            image_type = self.get_image_type()
-            image_name = f'{image_id}{image_type}'
-            save_path = os.path.join(COCO_images, image_name)
-            shutil.copy2(image_path, save_path)
+            # Write the modified data structure back to the JSON file
+            with open(self.json_path, 'w') as file:
+                json.dump(json_data, file, indent=4)
 
             # Confirmation of the process being completed.
             # Also prevents the function from being activated multiple times through spam
             msg_box = QMessageBox()
             msg_box.setWindowTitle("Process completed")
-            msg_box.setText("The current image's annotations are saved to COCO!"
-                            "\n The location of the COCO annotations and images are saved at:"
-                            f"\n {parent_directory}\COCO")
+            msg_box.setText(f"Succesfully updated file: {self.json_path}")
             msg_box.exec_()
-
-        else:
-            # No image_path returns false.
-            return 'false'
 
     def get_image_type(self):
         # Checks the filetype of the current image, so that it can be saved in the same format.
@@ -601,20 +705,29 @@ class ImageDrawer(QMainWindow):
             self.currentMultiAnnotations = []
 
     def update_image(self):
-        # Reset annotations
-        self.annotations = []
-        self.currentAnnotation = None
+        if self.json_path is not None:
+            # Load the image and display it in the scene
+            self.image = QPixmap(self.image_path)
+            self.scene.clear()
+            self.scene.addPixmap(self.image)
 
-        # Build the path to the current image
-        # image_path = os.path.join(self.folder_dir, self.folder_images[self.folder_current_image_index])
+            # Read the labels associated with the image
+            self.read_coco_file()
+        else:
+            # Reset annotations
+            self.annotations = []
+            self.currentAnnotation = None
 
-        # Load the image and display it in the scene
-        self.image = QPixmap(self.image_path)
-        self.scene.clear()
-        self.scene.addPixmap(self.image)
+            # Build the path to the current image
+            # image_path = os.path.join(self.folder_dir, self.folder_images[self.folder_current_image_index])
 
-        # Read labels associated with the image
-        self.resize_and_display_image()
+            # Load the image and display it in the scene
+            self.image = QPixmap(self.image_path)
+            self.scene.clear()
+            self.scene.addPixmap(self.image)
+
+            # Read labels associated with the image
+            self.resize_and_display_image()
 
     def previous_image(self):
         # Check if the current image index is not set
