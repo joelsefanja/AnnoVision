@@ -65,6 +65,8 @@ class Annotation():
         # Check if the label exists in the labels.py folder and assign the necessary label identification.
         self.check_label_id()
 
+        return True
+
     def deselect(self):
         # Change the pen color back to red to indicate deselection
         self.pen.setColor(Qt.red)
@@ -76,6 +78,8 @@ class Annotation():
 
         # Check if the label exists in the labels.py folder and assign the necessary label identification.
         self.check_label_id()
+
+        return True
 
     def calculate_points(self, image_width, image_height):
         if self.moving:

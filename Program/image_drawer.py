@@ -3,18 +3,22 @@ from pycocotools.coco import COCO
 from enum import Enum
 from annotation import Annotation
 from PyQt5.QtWidgets import QApplication, QMainWindow, QGraphicsView, QGraphicsScene, QAction, \
-    QFileDialog, QPushButton, QLabel, QLineEdit, QMessageBox
+    QFileDialog, QPushButton, QLabel, QLineEdit, QMessageBox, QInputDialog,  QListWidget, QListWidgetItem, QVBoxLayout, QWidget
 from PyQt5.QtGui import QPixmap, QIcon, QCursor
 from PyQt5.QtCore import Qt, QTimer, QPoint
 
 class Action(Enum):
-    OPEN = 1
-    SAVE = 2
-    COPY = 3
-    PASTE = 4
-    UNDO = 5
-    REDO = 6
-
+    OPEN_IMAGE = 1
+    OPEN_FOLDER = 2
+    PREDICT = 3
+    SELECT = 4
+    CREATE = 5
+    RESIZE = 6
+    MOVE = 7
+    RENAME = 8
+    DELETE = 9
+    PREVIOUS = 10
+    NEXT = 11
 class ImageDrawer(QMainWindow):
     def __init__(self):
         super().__init__()
@@ -26,6 +30,8 @@ class ImageDrawer(QMainWindow):
         self.connect_mouse_events()
         self.create_timer()
         self.create_buttons()
+        self.disable_buttons(self.buttons)
+        self.enable_buttons(self.open_buttons)
         self.create_toolbar()
         self.image_label = self.create_image_label()
         atexit.register(self.remove_empty_files)
@@ -43,12 +49,12 @@ class ImageDrawer(QMainWindow):
     def initialize_variables(self):
         self.image = None
         self.line_label = None
-        self.action = 0  # 0 select   1 create   2 edit   3 delete   4 resize   5 move
+        self.action = Action.SELECT  # 0 select   1 create   2 edit   3 delete   4 resize   5 move
         self.image_path = None
-        self.json_path = None
         self.folder_dir = None
         self.folder_images = []
         self.folder_current_image_index = None
+        self.preExistingAnnotations = []
         self.annotations = []
         self.currentAnnotation = None
         self.currentMultiAnnotations = []
@@ -63,24 +69,37 @@ class ImageDrawer(QMainWindow):
     def create_timer(self):
         self.timer = QTimer()
         self.timer.timeout.connect(self.drawing_annotation)
-
+    def disable_buttons(self, buttons_group):
+        for button in buttons_group:
+            button.setDisabled(True)
+    def enable_buttons(self, buttons_group):
+        for button in buttons_group:
+            button.setEnabled(True)
     def create_buttons(self):
         button_data = [
             {"label": "Open image", "icon": "../icons/open-image.png", "slot": self.open_image_file},
             {"label": "Open image folder", "icon": "../icons/folder.png", "slot": self.open_image_folder},
-            {"label": "Select", "icon": "../icons/cursor.png", "slot": self.action_select},
-            {"label": "Create", "icon": "../icons/box.png", "slot": self.action_create},
-            {"label": "Resize", "icon": "../icons/box.png", "slot": self.action_resize},
-            {"label": "Move", "icon": "../icons/box.png", "slot": self.action_move},
-            {"label": "Label", "icon": "../icons/font.png", "slot": self.action_label},
-            {"label": "Delete", "icon": "../icons/delete.png", "slot": self.action_delete},
             {"label": "Predict", "icon": "../icons/scan.png", "slot": self.run_auto_annotate},
-            {"label": "Save to COCO", "icon": "../icons/box.png", "slot": self.save_to_COCO},
+            {"label": "Select", "icon": "../icons/selection.png", "slot": self.action_select},
+            {"label": "Create", "icon": "../icons/edit.png", "slot": self.action_create},
+            {"label": "Resize", "icon": "../icons/resize.png", "slot": self.action_resize},
+            {"label": "Move", "icon": "../icons/move.png", "slot": self.action_move},
+            {"label": "Rename", "icon": "../icons/rename.png", "slot": self.action_rename},
+            {"label": "Delete", "icon": "../icons/delete.png", "slot": self.action_delete},
+            {"label": "Save to COCO", "icon": "../icons/save.png", "slot": self.save_to_COCO},
             {"label": "Previous image", "icon": "../icons/back.png", "slot": self.previous_image},
             {"label": "Next image", "icon": "../icons/next.png", "slot": self.next_image}
         ]
 
         self.buttons = []
+        self.open_buttons = []
+        self.loaded_image_buttons = []
+        self.edit_annotation_buttons = []
+        self.select_button = []
+        self.rename_button = []
+        self.delete_button = []
+        self.save_coco_button = []
+
 
         for button_info in button_data:
             button = QPushButton(button_info["label"], self)
@@ -101,6 +120,23 @@ class ImageDrawer(QMainWindow):
 
             self.buttons.append(button)
 
+            label = button_info["label"]
+
+            if label in ["Open image", "Open image folder"]:
+                self.open_buttons.append(button)
+            elif label in ["Predict", "Create", "Previous image", "Next image"]:
+                self.loaded_image_buttons.append(button)
+            elif label in ["Select"]:
+                self.select_button.append(button)
+            elif label in ["Rename","Resize", "Move", "Delete"]:
+                self.edit_annotation_buttons.append(button)
+            elif label in ["Rename"]:
+                self.rename_button.append(button)
+            elif label in ["Delete"]:
+                self.delete_button.append(button)
+            elif label in ["Save to COCO"]:
+                self.save_coco_button.append(button)
+
     def create_toolbar(self):
         toolbar = self.addToolBar("buttons")
 
@@ -113,7 +149,6 @@ class ImageDrawer(QMainWindow):
         image_label.setMinimumSize(400, 400)
         image_label.setStyleSheet("background-color: white; border: none;")
         return image_label
-
     def reset_annotations(self):
         # Reset the annotations
         self.json_path = None
@@ -181,10 +216,12 @@ class ImageDrawer(QMainWindow):
 
             # Check if the text file exists, if not create a text file to save the annotations to.
             if os.path.exists(label_file):
+                self.enable_buttons(self.save_coco_button)
                 return label_file
             else:
                 with open(label_file, 'w') as file:
                     pass
+                self.enable_buttons(self.save_coco_button)
                 return label_file
 
 
@@ -201,7 +238,18 @@ class ImageDrawer(QMainWindow):
         self.image = self.image.scaled(desired_width, desired_height, Qt.KeepAspectRatio, Qt.SmoothTransformation)
 
         self.scene.clear()
-        self.scene.addPixmap(self.image)
+        pixmap_item = self.scene.addPixmap(self.image)
+
+        # Calculate the center position of the scene
+        scene_width = self.scene.width()
+        scene_height = self.scene.height()
+        pixmap_width = pixmap_item.pixmap().width()
+        pixmap_height = pixmap_item.pixmap().height()
+        center_x = (scene_width - pixmap_width) / 2
+        center_y = (scene_height - pixmap_height) / 2
+
+        # Set the position of the pixmap item to the center
+        pixmap_item.setPos(center_x, center_y)
 
         if self.image_path:
             self.read_labels()
@@ -224,6 +272,8 @@ class ImageDrawer(QMainWindow):
             self.scene.addItem(self.currentAnnotation.rect)
             self.scene.addItem(self.currentAnnotation.text)
 
+
+            self.enable_buttons(self.loaded_image_buttons)
 
     def read_labels(self):
         label_path = self.get_label_file(self.folder_dir)
@@ -290,6 +340,11 @@ class ImageDrawer(QMainWindow):
             self.scene.addItem(self.currentAnnotation.rect)
             self.scene.addItem(self.currentAnnotation.text)
 
+        if self.annotations:
+            self.enable_buttons(self.select_button)
+        else:
+            self.disable_buttons(self.edit_annotation_buttons + self.select_button)
+
     def modify_txt_file(self):
         label_path = self.get_label_file(self.folder_dir)
         image_width = int(self.image.width())
@@ -319,6 +374,7 @@ class ImageDrawer(QMainWindow):
                 else:
                     line = f"{annotation.label_id} {x} {y} {w} {h}\n"
                     file.write(line)
+
     def save_to_COCO(self):
         if self.json_path is not None and os.path.exists(self.json_path):
             self.modify_COCO_file()
@@ -522,42 +578,54 @@ class ImageDrawer(QMainWindow):
             super().wheelEvent(event)
 
     def mouse_press_event(self, event):
+        # Check if the left mouse button is pressed and there is an image available
         if event.button() == Qt.LeftButton and self.image and event.type() == event.GraphicsSceneMousePress:
-            if self.action == 0:
+            if self.action == Action.CREATE:
                 mouse_pos = event.scenePos()
 
                 # Find all annotations at the mouse position
                 annotations = [annotation for annotation in self.annotations if annotation.rect.contains(mouse_pos)]
 
                 if self.currentMultiAnnotations:
+                    # Deselect all currently selected multi-annotations
                     for anno in self.currentMultiAnnotations:
                         anno.deselect()
                     self.currentMultiAnnotations = []
+
                 if self.currentAnnotation:
+                    # Deselect the current annotation if any
                     self.currentAnnotation.deselect()
 
                 if annotations:
                     if self.currentAnnotation in annotations:
                         # If the current annotation is in the list of overlapping annotations,
-                        # move to the next one
+                        # move to the next one in a circular manner
                         index = annotations.index(self.currentAnnotation)
                         self.currentAnnotation = annotations[(index + 1) % len(annotations)]
                         self.currentAnnotation.select()
+                        self.enable_buttons(self.edit_annotation_buttons)
                     else:
                         # If the current annotation is not in the list of overlapping annotations,
                         # select the first annotation from the list
                         self.currentAnnotation = annotations[0]
                         self.currentAnnotation.select()
+                        self.enable_buttons(self.edit_annotation_buttons)
                 else:
+                    # No annotations at the mouse position, clear the current annotation
                     self.currentAnnotation = None
+                    self.disable_buttons(self.edit_annotation_buttons)
+                    print("Annotation deselected.")
 
-            if self.action == 1:
+            if self.action == Action.CREATE:
+                self.view.setCursor(Qt.CrossCursor)
                 if self.currentMultiAnnotations:
                     for anno in self.currentMultiAnnotations:
                         anno.deselect()
                     self.currentMultiAnnotations = []
+                    self.disable_buttons(self.edit_annotation_buttons + self.select_button)
                 if self.currentAnnotation:
                     self.currentAnnotation.deselect()
+                    self.disable_buttons(self.edit_annotation_buttons + self.select_button)
 
                 start_point = event.scenePos()
                 start_point.setX(round(start_point.x()))
@@ -567,37 +635,57 @@ class ImageDrawer(QMainWindow):
                 self.drawing_annotation()
                 self.timer.start(16)
 
-            if self.action == 4:
+            if self.action == Action.RESIZE:
                 if self.currentAnnotation:
+                    marge = 10
                     mouse_pos = event.scenePos()
-                    if self.currentAnnotation.start_point.x() - 5 < mouse_pos.x() < self.currentAnnotation.start_point.x() + 5:
-                        self.currentAnnotation.lock_left = False
-                    if self.currentAnnotation.end_point.x() - 5 < mouse_pos.x() < self.currentAnnotation.end_point.x() + 5:
-                        self.currentAnnotation.lock_left = True
-                        self.currentAnnotation.lock_right = False
-                    if self.currentAnnotation.start_point.y() - 5 < mouse_pos.y() < self.currentAnnotation.start_point.y() + 5:
-                        self.currentAnnotation.lock_up = False
-                    if self.currentAnnotation.end_point.y() - 5 < mouse_pos.y() < self.currentAnnotation.end_point.y() + 5:
-                        self.currentAnnotation.lock_up = True
-                        self.currentAnnotation.lock_down = False
+                    annotation = self.currentAnnotation
+                    lock_left = annotation.start_point.x() - marge < mouse_pos.x() < annotation.start_point.x() + marge
+                    lock_right = annotation.end_point.x() - marge < mouse_pos.x() < annotation.end_point.x() + marge
+                    lock_up = annotation.start_point.y() - marge < mouse_pos.y() < annotation.start_point.y() + marge
+                    lock_down = annotation.end_point.y() - marge < mouse_pos.y() < annotation.end_point.y() + marge
 
-                    if not self.currentAnnotation.lock_left == self.currentAnnotation.lock_right == self.currentAnnotation.lock_up == self.currentAnnotation.lock_down == True:
-                        self.currentAnnotation.start_point_mouse = QCursor.pos()
+                    if lock_left:
+                        annotation.lock_left = False
+                        self.view.setCursor(Qt.SizeHorCursor)
+                    if lock_right:
+                        annotation.lock_left = True
+                        annotation.lock_right = False
+                        self.view.setCursor(Qt.SizeHorCursor)
+                    if lock_up:
+                        annotation.lock_up = False
+                        self.view.setCursor(Qt.SizeVerCursor)
+                    if lock_down:
+                        annotation.lock_up = True
+                        annotation.lock_down = False
+                        self.view.setCursor(Qt.SizeVerCursor)
+
+                    if not (lock_right and lock_down) or not (lock_left and lock_up):
+                        self.view.setCursor(Qt.SizeBDiagCursor)
+
+                    if not (lock_right and lock_up) or not (lock_left and lock_down):
+                        self.view.setCursor(Qt.SizeFDiagCursor)
+
+                    if not (lock_left and lock_right and lock_up and lock_down):
+                        annotation.start_point_mouse = QCursor.pos()
                         self.drawing_annotation()
                         self.timer.start(16)
 
-            if self.action == 5:
-                if self.currentAnnotation:
+            if self.action == Action.MOVE:
+                if self.currentAnnotation and not self.currentMultiAnnotations:
+                    self.view.setCursor(Qt.SizeAllCursor)
                     mouse_pos = event.scenePos()
-                    self.currentAnnotation.moving = True
-                    self.currentAnnotation.start_point_mouse = QCursor.pos()
+                    annotation = self.currentAnnotation
+                    annotation.moving = True
+                    annotation.start_point_mouse = QCursor.pos()
                     self.drawing_annotation()
                     self.timer.start(16)
 
     def mouse_release_event(self, event):
         if event.button() == Qt.LeftButton and self.image:
-            if self.action == 1: # Create
+            if self.action == Action.CREATE:
                 if self.currentAnnotation:
+                    self.view.setCursor(Qt.ArrowCursor)
                     self.timer.stop()
                     self.currentAnnotation.finish_drawing(self.image.width(), self.image.height())
 
@@ -605,18 +693,25 @@ class ImageDrawer(QMainWindow):
                     self.scene.addItem(self.currentAnnotation.rect)
                     self.scene.addItem(self.currentAnnotation.text)
 
-            if self.action == 4: # Resize
+            if self.action == Action.RESIZE:
                 if self.currentAnnotation:
+                    self.view.setCursor(Qt.ArrowCursor)
                     if not self.currentAnnotation.lock_left == self.currentAnnotation.lock_right == self.currentAnnotation.lock_up == self.currentAnnotation.lock_down == True:
                         self.timer.stop()
                         self.currentAnnotation.finish_drawing(self.image.width(), self.image.height())
 
-            if self.action == 5: # Move
+            if self.action == Action.MOVE:
                 if self.currentAnnotation:
+                    self.view.setCursor(Qt.ArrowCursor)
                     self.timer.stop()
                     self.currentAnnotation.finish_drawing(self.image.width(), self.image.height())
                     self.currentAnnotation.moving = False
-
+    def select_all_annotations(self):
+       self.currentMultiAnnotations = self.annotations[:]
+       if(self.currentMultiAnnotations):
+           self.enable_buttons(self.rename_button + self.delete_button)
+       for anno in self.currentMultiAnnotations:
+           anno.select()
     def key_press_event(self, event):
         if event.key() == Qt.Key_Left:
             self.previous_image()
@@ -626,15 +721,13 @@ class ImageDrawer(QMainWindow):
             super().keyPressEvent(event)
         if event.modifiers() == Qt.ControlModifier:
             if event.key() == Qt.Key_S:
-                self.set_action(0)
+                self.action_select()
             elif event.key() == Qt.Key_C:
-                self.set_action(1)
-            elif event.key() == Qt.Key_E:
-                self.set_action(2)
-                self.handle_edit_action()
+                self.action_create()
+            #elif event.key() == Qt.Key_E:
+             #   self.handle_edit_action()
             elif event.key() == Qt.Key_D:
-                self.set_action(3)
-                self.handle_delete_action()
+                self.action_delete()
             elif event.key() == Qt.Key_O:
                 self.open_image_file()
             elif event.key() == Qt.Key_BracketLeft:
@@ -652,58 +745,56 @@ class ImageDrawer(QMainWindow):
             elif event.key() == Qt.Key_Right:
                 self.next_image()
             elif event.key() == Qt.Key_A:
-                self.currentMultiAnnotations = self.annotations[:]
-                for anno in self.currentMultiAnnotations:
-                    anno.select()
+                self.select_all_annotations()
         else:
             if event.key() == Qt.Key_Left:
                 self.previous_image()
             elif event.key() == Qt.Key_Right:
                 self.next_image()
-
     def zoom_in(self):
         if self.image:
             self.view.scale(1.1, 1.1)
-
     def zoom_out(self):
         if self.image:
             self.view.scale(0.9, 0.9)
-
     def action_select(self):
-        self.action = 0
-
+        self.action = Action.SELECT
     def action_create(self):
-        self.action = 1
-
+        self.action = Action.CREATE
     def action_resize(self):
-        self.action = 4
-
+        self.action = Action.RESIZE
     def action_move(self):
-        self.action = 5
+        self.action = Action.MOVE
 
-    def action_label(self):
-        self.action = 2
-        if ((self.currentAnnotation != None or self.currentMultiAnnotations) and self.line_label == None):
-            self.line_label = QLineEdit(self)
-            self.line_label.move(int(self.width() / 2), int(self.height() / 2))
-            self.line_label.resize(80, 20)
-            self.line_label.setPlaceholderText("")
-            self.line_label.editingFinished.connect(self.close_line_label)
-            self.line_label.show()
+    def action_rename(self):
+        self.action = Action.RENAME
+
+        self.line_label = QLineEdit(self)
+        self.line_label.move(int(self.width() / 2), int(self.height() / 2))
+        self.line_label.resize(80, 20)
+        self.line_label.setPlaceholderText(self.currentAnnotation.label)
+        self.line_label.editingFinished.connect(self.close_line_label)
+        self.line_label.show()
+
 
     def action_delete(self):
-        self.action = 3
+        self.action = Action.DELETE
         if (self.currentAnnotation != None):
             anno = self.annotations.pop(self.annotations.index(self.currentAnnotation))
             self.scene.removeItem(anno.rect)
             self.scene.removeItem(anno.text)
             self.currentAnnotation = None
+            self.disable_buttons(self.edit_annotation_buttons)
+
         if (self.currentMultiAnnotations):
             for anno in self.currentMultiAnnotations:
                 self.scene.removeItem(anno.rect)
                 self.scene.removeItem(anno.text)
             self.currentMultiAnnotations = []
-
+            self.disable_buttons(self.edit_annotation_buttons)
+            self.disable_buttons(self.select_button)
+        if not self.annotations:
+            self.disable_buttons(self.edit_annotation_buttons + self.select_button)
     def update_image(self):
         if self.json_path is not None:
             # Load the image and display it in the scene
@@ -729,6 +820,12 @@ class ImageDrawer(QMainWindow):
             # Read labels associated with the image
             self.resize_and_display_image()
 
+        # Check if there are annotations for the current image
+        if len(self.annotations) > 0:
+            self.enable_buttons(self.select_button)
+        else:
+            self.disable_buttons(self.edit_annotation_buttons)
+            self.disable_buttons(self.select_button)
     def previous_image(self):
         # Check if the current image index is not set
         if self.folder_current_image_index is None:
@@ -766,26 +863,35 @@ class ImageDrawer(QMainWindow):
         self.update_image()
 
     def close_line_label(self):
-        if (self.line_label != None and self.currentAnnotation != None):
-            self.currentAnnotation.label = self.line_label.text()
+        new_label = self.line_label.text()
+        if self.currentAnnotation is not None:
+            self.currentAnnotation.label = new_label
             self.currentAnnotation.select()
-            self.line_label.close()
-            self.line_label = None
-        if (self.line_label != None and self.currentMultiAnnotations):
-            for anno in self.currentMultiAnnotations:
-                anno.label = self.line_label.text()
-                anno.deselect()
-            self.line_label.close()
-            self.line_label = None
-            self.currentMultiAnnotations = []
+            self.currentAnnotation.text.setPlainText(new_label)
+
+        if self.currentMultiAnnotations:
+            for annotation in self.currentMultiAnnotations:
+                annotation.label = new_label
+                annotation.deselect()
+                annotation.text.setPlainText(new_label)
+
+        self.line_label.close()
+        self.line_label = None
+        self.currentMultiAnnotations = []
+
+        font_size = '16px'  # Adjust the font size as desired
+        font_weight = 'bold'  # Set to 'bold' for bold text
+
+        self.setStyleSheet(f"QLineEdit {{ font-size: {font_size}; font-weight: {font_weight}; padding: 1rem; }}")
 
     def drawing_annotation(self):
         self.currentAnnotation.draw(self.image.width(), self.image.height())
         self.scene.addItem(self.currentAnnotation.rect)
-
+        if self.annotations is not None:
+            self.enable_buttons(self.select_button + self.edit_annotation_buttons)
     def run_auto_annotate(self):
         if self.image_path != None:
-            subprocess_command = f"python ../yolov7/detect.py --weights ../yolov7/yolov7-tiny.pt --conf 0.25 --nosave --save-txt --source {self.image_path} --name {self.image_path}"
+            subprocess_command = f"python ../yolo/detect.py --weights ../yolov7/yolov7-tiny.pt --conf 0.25 --nosave --save-txt --source {self.image_path} --name {self.image_path}"
             subprocess.run(subprocess_command, shell=True)
             self.update_image()
         else:
