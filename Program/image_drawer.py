@@ -70,8 +70,9 @@ class ImageDrawer(QMainWindow):
         self.timer = QTimer()
         self.timer.timeout.connect(self.drawing_annotation)
     def disable_buttons(self, buttons_group):
-        for button in buttons_group:
-            button.setDisabled(True)
+          # for button in buttons_group:
+          #  button.setDisabled(True)
+        pass
     def enable_buttons(self, buttons_group):
         for button in buttons_group:
             button.setEnabled(True)
