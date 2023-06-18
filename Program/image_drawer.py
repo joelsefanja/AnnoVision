@@ -614,7 +614,6 @@ class ImageDrawer(QMainWindow):
                     # No annotations at the mouse position, clear the current annotation
                     self.currentAnnotation = None
                     self.disable_buttons(self.edit_annotation_buttons)
-                    print("Annotation deselected.")
 
             if self.action == Action.CREATE:
                 self.view.setCursor(Qt.CrossCursor)
@@ -622,10 +621,10 @@ class ImageDrawer(QMainWindow):
                     for anno in self.currentMultiAnnotations:
                         anno.deselect()
                     self.currentMultiAnnotations = []
-                    self.disable_buttons(self.edit_annotation_buttons + self.select_button)
+                    self.enable_buttons(self.edit_annotation_buttons + self.select_button)
                 if self.currentAnnotation:
                     self.currentAnnotation.deselect()
-                    self.disable_buttons(self.edit_annotation_buttons + self.select_button)
+                    self.enable_buttons(self.edit_annotation_buttons + self.select_button)
 
                 start_point = event.scenePos()
                 start_point.setX(round(start_point.x()))
@@ -804,6 +803,8 @@ class ImageDrawer(QMainWindow):
 
             # Read the labels associated with the image
             self.read_coco_file()
+            self.enable_buttons(self.loaded_image_buttons)
+
         else:
             # Reset annotations
             self.annotations = []
