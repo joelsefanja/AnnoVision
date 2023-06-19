@@ -54,6 +54,8 @@ class ImageDrawer(QMainWindow):
         self.currentMultiAnnotations = []
         self.possibleSelectAnnotations = []
         self.selectedAnnotationIndex = 0
+        self.documents_path = os.path.expanduser('~/Documents')
+        self.documents_path = os.path.join(self.documents_path, 'AnnoVision')
 
     def connect_mouse_events(self):
         self.scene.mousePressEvent = self.mouse_press_event
@@ -168,7 +170,8 @@ class ImageDrawer(QMainWindow):
         return image_files
 
     def get_label_file(self, folder_path):
-        os.makedirs(r"../annotations_save", exist_ok=True)
+        os.makedirs(self.documents_path, exist_ok=True)
+        os.makedirs(os.path.join(self.documents_path, 'annotations_save'), exist_ok=True)
         if self.image_path:
              # Get the image name from it's path
             image_file = os.path.normpath(self.image_path)
@@ -177,7 +180,8 @@ class ImageDrawer(QMainWindow):
             image_file = image_file.split(".")[0]
 
             # Assign folder path
-            label_file = os.path.join(f"../annotations_save/{image_file}.txt")
+            label_file = os.path.join(f"{image_file}.txt")
+            label_file = os.path.join(self.documents_path, 'annotations_save', label_file)
 
             # Check if the text file exists, if not create a text file to save the annotations to.
             if os.path.exists(label_file):
@@ -337,10 +341,8 @@ class ImageDrawer(QMainWindow):
                 timestamp = datetime.datetime.now().isoformat()
 
                 # Construct the file paths
-                current_directory = os.getcwd()
-                parent_directory = os.path.dirname(current_directory)
-                COCO_images = os.path.join(parent_directory, 'COCO', 'Images')
-                COCO_annotations = os.path.join(parent_directory, 'COCO', 'Annotations')
+                COCO_images = os.path.join(self.documents_path, 'COCO', 'Images')
+                COCO_annotations = os.path.join(self.documents_path, 'COCO', 'Annotations')
 
                 # Check if the directories exists and determine the image_id, if not then create the directory
                 if os.path.exists(COCO_images):
@@ -429,7 +431,7 @@ class ImageDrawer(QMainWindow):
                 msg_box.setWindowTitle("Process completed")
                 msg_box.setText("The current image's annotations are saved to COCO!"
                                 "\n The location of the COCO annotations and images are saved at:"
-                                f"\n {parent_directory}\COCO")
+                                f"\n {self.documents_path}\COCO")
                 msg_box.exec_()
 
             else:
@@ -605,17 +607,26 @@ class ImageDrawer(QMainWindow):
                     self.scene.addItem(self.currentAnnotation.rect)
                     self.scene.addItem(self.currentAnnotation.text)
 
+                    if self.json_path == None:
+                        self.modify_txt_file()
+
             if self.action == 4: # Resize
                 if self.currentAnnotation:
                     if not self.currentAnnotation.lock_left == self.currentAnnotation.lock_right == self.currentAnnotation.lock_up == self.currentAnnotation.lock_down == True:
                         self.timer.stop()
                         self.currentAnnotation.finish_drawing(self.image.width(), self.image.height())
 
+                        if self.json_path == None:
+                            self.modify_txt_file()
+
             if self.action == 5: # Move
                 if self.currentAnnotation:
                     self.timer.stop()
                     self.currentAnnotation.finish_drawing(self.image.width(), self.image.height())
                     self.currentAnnotation.moving = False
+
+                if self.json_path == None:
+                    self.modify_txt_file()
 
     def key_press_event(self, event):
         if event.key() == Qt.Key_Left:
@@ -698,11 +709,17 @@ class ImageDrawer(QMainWindow):
             self.scene.removeItem(anno.rect)
             self.scene.removeItem(anno.text)
             self.currentAnnotation = None
+
+            if self.json_path == None:
+                self.modify_txt_file()
         if (self.currentMultiAnnotations):
             for anno in self.currentMultiAnnotations:
                 self.scene.removeItem(anno.rect)
                 self.scene.removeItem(anno.text)
             self.currentMultiAnnotations = []
+
+            if self.json_path == None:
+                self.modify_txt_file()
 
     def update_image(self):
         if self.json_path is not None:
@@ -740,8 +757,8 @@ class ImageDrawer(QMainWindow):
         if self.folder_current_image_index < 0:
             self.folder_current_image_index = len(self.folder_images) - 1
 
-        # Update the .txt annotations file
-        self.modify_txt_file()
+        if self.json_path == None:
+            self.modify_txt_file()
 
         # Update the displayed image
         self.image_path = os.path.join(self.folder_dir, self.folder_images[self.folder_current_image_index])
@@ -758,8 +775,8 @@ class ImageDrawer(QMainWindow):
         if self.folder_current_image_index >= len(self.folder_images):
             self.folder_current_image_index = 0
 
-        # Update the .txt annotations file
-        self.modify_txt_file()
+        if self.json_path == None:
+            self.modify_txt_file()
 
         # Update the displayed image
         self.image_path = os.path.join(self.folder_dir, self.folder_images[self.folder_current_image_index])
@@ -785,7 +802,8 @@ class ImageDrawer(QMainWindow):
 
     def run_auto_annotate(self):
         if self.image_path != None:
-            subprocess_command = f"python ../yolov7/detect.py --weights ../yolov7/yolov7-tiny.pt --conf 0.25 --nosave --save-txt --source {self.image_path} --name {self.image_path}"
+            subprocess_command = subprocess_command = f"python ../yolo/detect.py --weights ../yolov7/yolov7-tiny.pt --conf 0.25 --nosave --save-txt --source {self.image_path} --name {self.image_path}"
+            print(subprocess_command)
             subprocess.run(subprocess_command, shell=True)
             self.update_image()
         else:
