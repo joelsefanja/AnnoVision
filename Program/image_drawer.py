@@ -104,7 +104,8 @@ class ImageDrawer(QMainWindow):
             {"label": "Delete", "icon": "../icons/delete.png", "slot": self.action_delete},
             {"label": "Save to COCO", "icon": "../icons/save.png", "slot": self.save_to_COCO},
             {"label": "Previous image", "icon": "../icons/back.png", "slot": self.previous_image},
-            {"label": "Next image", "icon": "../icons/next.png", "slot": self.next_image}
+            {"label": "Next image", "icon": "../icons/next.png", "slot": self.next_image},
+            {"label": "Export image", "icon": "../icons/save.png", "slot": self.export_image}
         ]
 
         self.buttons = []
@@ -146,6 +147,8 @@ class ImageDrawer(QMainWindow):
             elif label in ["Rename", "Delete"]:
                 self.edit_multiple_annotation_buttons.append(button)
             elif label in ["Save to COCO", "Select"]:
+                self.existing_annotation_buttons.append(button)
+            elif label in ["Export image", "Export image"]:
                 self.existing_annotation_buttons.append(button)
 
     def create_toolbar(self):
@@ -355,35 +358,40 @@ class ImageDrawer(QMainWindow):
             self.scene.addItem(self.currentAnnotation.rect)
             self.scene.addItem(self.currentAnnotation.text)
 
-    def modify_txt_file(self):
+    def modify_txt_file(self, delete_all):
         label_path = self.get_label_file(self.folder_dir)
         image_width = int(self.image.width())
         image_height = int(self.image.height())
 
-        if len(self.annotations) == 0:
-            self.read_labels()
+        if delete_all == 'true':
+            # Clear the .txt file, so it can be overwritten.
+            with open(label_path, 'w') as file:
+                pass
+        elif delete_all == 'false':
+            if len(self.annotations) == 0:
+                self.read_labels()
 
-        # Clear the .txt file, so it can be overwritten.
-        with open(label_path, 'w') as file:
-            pass
+            # Clear the .txt file, so it can be overwritten.
+            with open(label_path, 'w') as file:
+                pass
 
-        # Modify the annotations as needed
-        for annotation in self.annotations:
+            # Modify the annotations as needed
+            for annotation in self.annotations:
 
-            # Convert the coordinates back to YoloV7 format
-            x = (annotation.start_point.x() + annotation.end_point.x()) / (2 * image_width)
-            y = (annotation.start_point.y() + annotation.end_point.y()) / (2 * image_height)
-            w = (annotation.end_point.x() - annotation.start_point.x()) / image_width
-            h = (annotation.end_point.y() - annotation.start_point.y()) / image_height
+                # Convert the coordinates back to YoloV7 format
+                x = (annotation.start_point.x() + annotation.end_point.x()) / (2 * image_width)
+                y = (annotation.start_point.y() + annotation.end_point.y()) / (2 * image_height)
+                w = (annotation.end_point.x() - annotation.start_point.x()) / image_width
+                h = (annotation.end_point.y() - annotation.start_point.y()) / image_height
 
-            # Write the old + new annotations to the .txt file
-            with open(label_path, 'a') as file:
-                if isinstance(annotation.label_id, str):
-                    line = f"{annotation.label} {x} {y} {w} {h}\n"
-                    file.write(line)
-                else:
-                    line = f"{annotation.label_id} {x} {y} {w} {h}\n"
-                    file.write(line)
+                # Write the old + new annotations to the .txt file
+                with open(label_path, 'a') as file:
+                    if isinstance(annotation.label_id, str):
+                        line = f"{annotation.label} {x} {y} {w} {h}\n"
+                        file.write(line)
+                    else:
+                        line = f"{annotation.label_id} {x} {y} {w} {h}\n"
+                        file.write(line)
 
     def save_to_COCO(self):
         if self.json_path is not None and os.path.exists(self.json_path):
@@ -697,7 +705,7 @@ class ImageDrawer(QMainWindow):
                     self.scene.addItem(self.currentAnnotation.text)
 
                     if self.json_path == None:
-                        self.modify_txt_file()
+                        self.modify_txt_file('false')
 
             if self.action == Action.RESIZE:
                 if self.currentAnnotation:
@@ -707,7 +715,7 @@ class ImageDrawer(QMainWindow):
                         self.currentAnnotation.finish_drawing(self.image.width(), self.image.height())
 
                         if self.json_path == None:
-                            self.modify_txt_file()
+                            self.modify_txt_file('false')
 
             if self.action == Action.MOVE:
                 if self.currentAnnotation:
@@ -717,7 +725,7 @@ class ImageDrawer(QMainWindow):
                     self.currentAnnotation.moving = False
 
                 if self.json_path == None:
-                    self.modify_txt_file()
+                    self.modify_txt_file('false')
 
         self.update_buttons()
 
@@ -729,6 +737,7 @@ class ImageDrawer(QMainWindow):
        if(self.currentMultiAnnotations):
            for anno in self.currentMultiAnnotations:
                anno.select()
+
 
     def key_press_event(self, event):
         if event.key() == Qt.Key_Left:
@@ -804,9 +813,11 @@ class ImageDrawer(QMainWindow):
             self.scene.removeItem(anno.rect)
             self.scene.removeItem(anno.text)
             self.currentAnnotation = None
+            if self.annotations == []:
+                self.modify_txt_file('true')
 
-            if self.json_path == None:
-                self.modify_txt_file()
+            elif self.json_path == None and self.annotations != []:
+                self.modify_txt_file('false')
             #self.disable_buttons(self.edit_annotation_buttons)
 
         if (self.currentMultiAnnotations):
@@ -814,9 +825,10 @@ class ImageDrawer(QMainWindow):
                 self.scene.removeItem(anno.rect)
                 self.scene.removeItem(anno.text)
             self.currentMultiAnnotations = []
+            self.annotations = []
 
             if self.json_path == None:
-                self.modify_txt_file()
+                self.modify_txt_file('true')
 
             # self.disable_buttons(self.edit_annotation_buttons)
             # self.disable_buttons(self.select_button)
@@ -826,6 +838,16 @@ class ImageDrawer(QMainWindow):
         self.update_buttons()
 
     def update_image(self):
+        if self.json_path is not None:
+            # Load the image and display it in the scene
+            self.image = QPixmap(self.image_path)
+            self.scene.clear()
+            self.scene.addPixmap(self.image)
+
+            # Read the labels associated with the image
+            self.read_coco_file()
+
+        else:
             # Reset annotations
             self.annotations = []
             self.currentAnnotation = None
@@ -852,7 +874,7 @@ class ImageDrawer(QMainWindow):
             self.folder_current_image_index = len(self.folder_images) - 1
 
         if self.json_path == None:
-            self.modify_txt_file()
+            self.modify_txt_file('false')
 
         # Update the displayed image
         self.image_path = os.path.join(self.folder_dir, self.folder_images[self.folder_current_image_index])
@@ -870,7 +892,7 @@ class ImageDrawer(QMainWindow):
             self.folder_current_image_index = 0
 
         if self.json_path == None:
-            self.modify_txt_file()
+            self.modify_txt_file('false')
 
         # Update the displayed image
         self.image_path = os.path.join(self.folder_dir, self.folder_images[self.folder_current_image_index])
@@ -910,6 +932,13 @@ class ImageDrawer(QMainWindow):
             self.update_image()
         else:
             print("No image file selected.")
+
+    def export_image(self):
+        os.makedirs(self.documents_path, exist_ok=True)
+        export_path = os.path.join(self.documents_path, 'Export')
+        os.makedirs(export_path, exist_ok=True)
+        #pixmap = QPixmap.grab(self.image.viewport())
+        pixmap.save(export_path)
 
     @staticmethod
     def remove_empty_files():

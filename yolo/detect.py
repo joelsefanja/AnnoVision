@@ -1,4 +1,5 @@
 import argparse
+import os
 import time
 from pathlib import Path
 
@@ -109,7 +110,9 @@ def detect(save_img=False):
             save_path = str(p.stem)  # img.jpg
 
             img_path = str(p).removesuffix(str(p.name))
-            txt_path = img_path + str(p.stem) # img.txt
+            documents_path = os.path.expanduser('~/Documents')
+            documents_path = os.path.join(documents_path, 'AnnoVision')
+            txt_path = os.path.join(documents_path, 'annotations_save', str(p.stem)) # img.txt
             print(str(img_path))
             print(txt_path)
 
