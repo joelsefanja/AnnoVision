@@ -183,6 +183,7 @@ class ImageDrawer(QMainWindow):
 
             self.image_path = json_data["images"][0]["file_name"]
             self.image_path = self.image_path.replace("\\", "/")
+            self.image_path = os.path.join(self.documents_path, self.image_path)
             self.update_image()  # Call update_image function
         elif file_path:
             self.folder_dir = os.path.dirname(file_path)
@@ -234,12 +235,10 @@ class ImageDrawer(QMainWindow):
 
             # Check if the text file exists, if not create a text file to save the annotations to.
             if os.path.exists(label_file):
-                self.enable_buttons(self.save_coco_button)
                 return label_file
             else:
                 with open(label_file, 'w') as file:
                     pass
-                self.enable_buttons(self.save_coco_button)
                 return label_file
 
 
@@ -432,7 +431,7 @@ class ImageDrawer(QMainWindow):
                     "id": image_id,
                     "width": image_width,
                     "height": image_height,
-                    "file_name": f"..\COCO\images\{image_id}{image_type}"
+                    "file_name": f"{self.documents_path}{image_id}{image_type}"
                 }
                 coco.dataset["images"].append(images)
 
@@ -807,7 +806,7 @@ class ImageDrawer(QMainWindow):
 
             if self.json_path == None:
                 self.modify_txt_file()
-            self.disable_buttons(self.edit_annotation_buttons)
+            #self.disable_buttons(self.edit_annotation_buttons)
 
         if (self.currentMultiAnnotations):
             for anno in self.currentMultiAnnotations:
@@ -818,10 +817,11 @@ class ImageDrawer(QMainWindow):
             if self.json_path == None:
                 self.modify_txt_file()
 
-            self.disable_buttons(self.edit_annotation_buttons)
-            self.disable_buttons(self.select_button)
-        if not self.annotations:
-            self.disable_buttons(self.edit_annotation_buttons + self.select_button)
+            # self.disable_buttons(self.edit_annotation_buttons)
+            # self.disable_buttons(self.select_button)
+        # if not self.annotations:
+        #     self.disable_buttons(self.edit_annotation_buttons + self.select_button)
+
         self.update_buttons()
 
     def update_image(self):
