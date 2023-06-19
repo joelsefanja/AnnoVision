@@ -4,7 +4,7 @@ from enum import Enum
 from annotation import Annotation
 from PyQt5.QtWidgets import QApplication, QMainWindow, QGraphicsView, QGraphicsScene, QAction, \
     QFileDialog, QPushButton, QLabel, QLineEdit, QMessageBox, QInputDialog,  QListWidget, QListWidgetItem, QVBoxLayout, QWidget
-from PyQt5.QtGui import QPixmap, QIcon, QCursor
+from PyQt5.QtGui import QPixmap, QIcon, QCursor, QPainter
 from PyQt5.QtCore import Qt, QTimer, QPoint
 
 class Action(Enum):
@@ -103,8 +103,8 @@ class ImageDrawer(QMainWindow):
         if self.annotations:
             self.enable_buttons(self.existing_annotation_buttons, True)
             self.enable_buttons(self.predict_button, False)
-            self.enable_buttons(self.predict_button, False)
-
+        if not self.annotations:
+            self.enable_buttons(self.predict_button, True)
     def create_buttons(self):
         button_data = [
             {"label": "Open image", "icon": "../icons/open-image.png", "slot": self.open_image_file},
@@ -155,7 +155,7 @@ class ImageDrawer(QMainWindow):
 
             if label in ["Open image", "Open image folder"]:
                 self.open_buttons.append(button)
-            elif label in ["Predict", "Create", "Previous image", "Next image"]:
+            elif label in ["Create", "Previous image", "Next image"]:
                 self.no_annotation_buttons.append(button)
             elif label in ["Resize", "Move"]:
                 self.edit_single_annotation_buttons.append(button)
@@ -163,9 +163,7 @@ class ImageDrawer(QMainWindow):
                 self.edit_multiple_annotation_buttons.append(button)
                 if label == "Rename":
                     self.edit_multiple_annotation_buttons.append(self.line_label)
-            elif label in ["Save to COCO", "Select"]:
-                self.existing_annotation_buttons.append(button)
-            elif label in ["Export image", "Export image"]:
+            elif label in ["Save to COCO", "Select", "Export image"]:
                 self.existing_annotation_buttons.append(button)
             elif label in ["Predict"]:
                 self.predict_button.append(button)
@@ -380,7 +378,7 @@ class ImageDrawer(QMainWindow):
             self.scene.addItem(self.currentAnnotation.rect)
             self.scene.addItem(self.currentAnnotation.text)
 
-    def modify_txt_file(self):
+    def modify_txt_file(self, delete_all):
         label_path = self.get_label_file(self.folder_dir)
         image_width = int(self.image.width())
         image_height = int(self.image.height())
@@ -874,6 +872,9 @@ class ImageDrawer(QMainWindow):
 
     def update_image(self):
         if self.json_path is not None:
+            self.annotations = []
+            self.currentAnnotation = None
+
             # Load the image and display it in the scene
             self.image = QPixmap(self.image_path)
             self.scene.clear()
@@ -946,12 +947,26 @@ class ImageDrawer(QMainWindow):
         else:
             print("No image file selected.")
 
-    def export_image(self):
+    def export_image(self, folder_path):
         os.makedirs(self.documents_path, exist_ok=True)
         export_path = os.path.join(self.documents_path, 'Export')
         os.makedirs(export_path, exist_ok=True)
-        #pixmap = QPixmap.grab(self.image.viewport())
-        pixmap.save(export_path)
+
+        combined_image = QPixmap(self.image.size())
+        combined_image.fill(Qt.transparent)  # Set the background of the combined image to transparent
+
+        painter = QPainter(combined_image)
+        self.scene.render(painter)  # Render the scene onto the combined image
+        painter.end()  # End painting
+
+        # Get the image name from it's path
+        image_file = os.path.normpath(self.image_path)
+        image_file = image_file.replace("\\", "/")
+        image_file = image_file.split(fr"{self.folder_dir}/")[1]
+        image_file = image_file.split(".")[0]
+
+        save_path = os.path.join(export_path, image_file + "png")
+        combined_image.save(save_path)
 
     @staticmethod
     def remove_empty_files():
