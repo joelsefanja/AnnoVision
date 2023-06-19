@@ -698,7 +698,6 @@ class ImageDrawer(QMainWindow):
                     if self.json_path == None:
                         self.modify_txt_file()
 
-            if self.action == 4: # Resize
             if self.action == Action.RESIZE:
                 if self.currentAnnotation:
                     self.view.setCursor(Qt.ArrowCursor)
@@ -709,7 +708,6 @@ class ImageDrawer(QMainWindow):
                         if self.json_path == None:
                             self.modify_txt_file()
 
-            if self.action == 5: # Move
             if self.action == Action.MOVE:
                 if self.currentAnnotation:
                     self.view.setCursor(Qt.ArrowCursor)
