@@ -48,7 +48,19 @@ class ImageDrawer(QMainWindow):
 
     def initialize_variables(self):
         self.image = None
-        self.line_label = None
+
+        textField = QLineEdit()
+        textField.setStyleSheet("""
+                                    QLineEdit {
+                                        padding: 10px;
+                                        font-size: 16px;
+                                    }
+                                """)
+        textField.setMaximumWidth(256)
+        textField.setEnabled(False)
+        textField.setPlaceholderText("Write label text here...")
+        textField.setMaxLength(24)
+        self.line_label = textField
         self.action = Action.SELECT  # 0 select   1 create   2 edit   3 delete   4 resize   5 move
         self.image_path = None
         self.json_path = None
@@ -90,6 +102,8 @@ class ImageDrawer(QMainWindow):
             self.enable_buttons(self.edit_multiple_annotation_buttons, True)
         if self.annotations:
             self.enable_buttons(self.existing_annotation_buttons, True)
+            self.enable_buttons(self.predict_button, False)
+            self.enable_buttons(self.predict_button, False)
 
     def create_buttons(self):
         button_data = [
@@ -115,6 +129,7 @@ class ImageDrawer(QMainWindow):
         self.edit_single_annotation_buttons = []
         self.edit_multiple_annotation_buttons = []
         self.existing_annotation_buttons = []
+        self.predict_button = []
 
 
         for button_info in button_data:
@@ -146,16 +161,23 @@ class ImageDrawer(QMainWindow):
                 self.edit_single_annotation_buttons.append(button)
             elif label in ["Rename", "Delete"]:
                 self.edit_multiple_annotation_buttons.append(button)
+                if label == "Rename":
+                    self.edit_multiple_annotation_buttons.append(self.line_label)
             elif label in ["Save to COCO", "Select"]:
                 self.existing_annotation_buttons.append(button)
             elif label in ["Export image", "Export image"]:
                 self.existing_annotation_buttons.append(button)
+            elif label in ["Predict"]:
+                self.predict_button.append(button)
+
 
     def create_toolbar(self):
         toolbar = self.addToolBar("buttons")
 
         for button in self.buttons:
             toolbar.addWidget(button)
+            if button.text() == "Rename":
+                toolbar.addWidget(self.line_label)
 
     def create_image_label(self):
         image_label = QLabel()
@@ -358,7 +380,7 @@ class ImageDrawer(QMainWindow):
             self.scene.addItem(self.currentAnnotation.rect)
             self.scene.addItem(self.currentAnnotation.text)
 
-    def modify_txt_file(self, delete_all):
+    def modify_txt_file(self):
         label_path = self.get_label_file(self.folder_dir)
         image_width = int(self.image.width())
         image_height = int(self.image.height())
@@ -602,18 +624,26 @@ class ImageDrawer(QMainWindow):
                 # Find all annotations at the mouse position
                 annotations = [annotation for annotation in self.annotations if annotation.rect.contains(mouse_pos)]
 
-                if self.currentMultiAnnotations:
-                    # Deselect all currently selected multi-annotations
-                    for anno in self.currentMultiAnnotations:
-                        anno.deselect()
-                    self.currentMultiAnnotations = []
+                for anno in self.annotations:
+                    anno.deselect()
 
-                if self.currentAnnotation:
-                    # Deselect the current annotation if any
-                    self.currentAnnotation.deselect()
+                if not event.modifiers() == Qt.ShiftModifier:
+                    if self.currentMultiAnnotations:
+                        self.currentMultiAnnotations = []
 
                 if annotations:
-                    if self.currentAnnotation in annotations:
+                    if event.modifiers() == Qt.ShiftModifier:
+                        if self.currentAnnotation:
+                            self.currentMultiAnnotations.append(self.currentAnnotation)
+                        self.currentAnnotation = None
+                        new_annotations = [anno for anno in annotations if anno not in self.currentMultiAnnotations]
+                        if new_annotations:
+                            self.currentMultiAnnotations.append(new_annotations[0])
+                        else:
+                            self.currentMultiAnnotations.remove(annotations[0])
+                        for anno in self.currentMultiAnnotations:
+                            anno.select()
+                    elif self.currentAnnotation in annotations:
                         # If the current annotation is in the list of overlapping annotations,
                         # move to the next one in a circular manner
                         index = annotations.index(self.currentAnnotation)
@@ -703,6 +733,7 @@ class ImageDrawer(QMainWindow):
                     self.annotations.append(self.currentAnnotation)
                     self.scene.addItem(self.currentAnnotation.rect)
                     self.scene.addItem(self.currentAnnotation.text)
+                    self.currentAnnotation.select()
 
                     if self.json_path == None:
                         self.modify_txt_file('false')
@@ -737,7 +768,6 @@ class ImageDrawer(QMainWindow):
        if(self.currentMultiAnnotations):
            for anno in self.currentMultiAnnotations:
                anno.select()
-
 
     def key_press_event(self, event):
         if event.key() == Qt.Key_Left:
@@ -798,12 +828,17 @@ class ImageDrawer(QMainWindow):
     def action_rename(self):
         self.action = Action.RENAME
 
-        self.line_label = QLineEdit(self)
-        self.line_label.move(int(self.width() / 2), int(self.height() / 2))
-        self.line_label.resize(80, 20)
-        self.line_label.setPlaceholderText(self.currentAnnotation.label)
-        self.line_label.editingFinished.connect(self.close_line_label)
-        self.line_label.show()
+        new_label = self.line_label.text()
+        if new_label == "": new_label = "Label"
+        if self.currentAnnotation:
+            self.currentAnnotation.label = new_label
+            self.currentAnnotation.select()
+
+        if self.currentMultiAnnotations:
+            for annotation in self.currentMultiAnnotations:
+                annotation.label = new_label
+                annotation.deselect()
+        self.currentMultiAnnotations = []
 
 
     def action_delete(self):
@@ -897,28 +932,6 @@ class ImageDrawer(QMainWindow):
         # Update the displayed image
         self.image_path = os.path.join(self.folder_dir, self.folder_images[self.folder_current_image_index])
         self.update_image()
-
-    def close_line_label(self):
-        new_label = self.line_label.text()
-        if self.currentAnnotation is not None:
-            self.currentAnnotation.label = new_label
-            self.currentAnnotation.select()
-            self.currentAnnotation.text.setPlainText(new_label)
-
-        if self.currentMultiAnnotations:
-            for annotation in self.currentMultiAnnotations:
-                annotation.label = new_label
-                annotation.deselect()
-                annotation.text.setPlainText(new_label)
-
-        self.line_label.close()
-        self.line_label = None
-        self.currentMultiAnnotations = []
-
-        font_size = '16px'  # Adjust the font size as desired
-        font_weight = 'bold'  # Set to 'bold' for bold text
-
-        self.setStyleSheet(f"QLineEdit {{ font-size: {font_size}; font-weight: {font_weight}; padding: 1rem; }}")
 
     def drawing_annotation(self):
         self.currentAnnotation.draw(self.image.width(), self.image.height())

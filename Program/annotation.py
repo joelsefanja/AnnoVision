@@ -47,10 +47,10 @@ class Annotation():
         self.rect.setRect(QRectF(start_point, end_point))
 
         # Update the label position
-        self.text.setPos(start_point.x() - 5, start_point.y() - 16)
+        self.text.setPos(start_point.x() - 5, start_point.y() - 20)
 
         # Update the label text and style
-        self.text.setHtml(f"<div style='color: white; background-color: green;'>{self.label}</div>")
+        self.text.setHtml(f"<div style='color: white; background-color: green;' font-size: 14px;'>‎ {self.label} </div>")
 
 
     def select(self):
@@ -60,7 +60,7 @@ class Annotation():
 
         # Update the rectangle and label with the current points and selected style
         self.update_rect(self.start_point, self.end_point)
-        self.text.setHtml(f"<div style='color: white; background-color: green;'>{self.label}</div>")
+        self.text.setHtml(f"<div style='color: white; background-color: green; font-size: 14px;'>‎ {self.label} </div>")
 
         # Check if the label exists in the labels.py folder and assign the necessary label identification.
         self.check_label_id()
@@ -74,7 +74,7 @@ class Annotation():
 
         # Update the rectangle and label with the current points and deselected style
         self.update_rect(self.start_point, self.end_point)
-        self.text.setHtml(f"<div style='color: white; background-color: red;'>{self.label}</div>")
+        self.text.setHtml(f"<div style='color: white; background-color: red; font-size: 14px;'>‎ {self.label} </div>")
 
         # Check if the label exists in the labels.py folder and assign the necessary label identification.
         self.check_label_id()
