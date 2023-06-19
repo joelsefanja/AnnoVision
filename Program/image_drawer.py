@@ -183,7 +183,6 @@ class ImageDrawer(QMainWindow):
 
             self.image_path = json_data["images"][0]["file_name"]
             self.image_path = self.image_path.replace("\\", "/")
-            self.image_path = os.path.join(self.documents_path, self.image_path)
             self.update_image()  # Call update_image function
         elif file_path:
             self.folder_dir = os.path.dirname(file_path)
@@ -268,8 +267,10 @@ class ImageDrawer(QMainWindow):
         # Set the position of the pixmap item to the center
         pixmap_item.setPos(center_x, center_y)
 
-        if self.image_path:
+        if self.image_path and self.json_path is None:
             self.read_labels()
+        if self.json_path is not None:
+            self.read_coco_file()
 
     def read_coco_file(self):
         with open(self.json_path, 'r') as json_file:
@@ -431,7 +432,7 @@ class ImageDrawer(QMainWindow):
                     "id": image_id,
                     "width": image_width,
                     "height": image_height,
-                    "file_name": f"{self.documents_path}{image_id}{image_type}"
+                    "file_name": fr"{self.documents_path}\COCO\Images\{image_id}{image_type}"
                 }
                 coco.dataset["images"].append(images)
 
@@ -825,16 +826,6 @@ class ImageDrawer(QMainWindow):
         self.update_buttons()
 
     def update_image(self):
-        if self.json_path is not None:
-            # Load the image and display it in the scene
-            self.image = QPixmap(self.image_path)
-            self.scene.clear()
-            self.scene.addPixmap(self.image)
-
-            # Read the labels associated with the image
-            self.read_coco_file()
-
-        else:
             # Reset annotations
             self.annotations = []
             self.currentAnnotation = None
