@@ -581,7 +581,7 @@ class ImageDrawer(QMainWindow):
     def mouse_press_event(self, event):
         # Check if the left mouse button is pressed and there is an image available
         if event.button() == Qt.LeftButton and self.image and event.type() == event.GraphicsSceneMousePress:
-            if self.action == Action.CREATE:
+            if self.action == Action.SELECT:
                 mouse_pos = event.scenePos()
 
                 # Find all annotations at the mouse position
@@ -660,16 +660,15 @@ class ImageDrawer(QMainWindow):
                         annotation.lock_down = False
                         self.view.setCursor(Qt.SizeVerCursor)
 
-                    if not (lock_right and lock_down) or not (lock_left and lock_up):
-                        self.view.setCursor(Qt.SizeBDiagCursor)
-
-                    if not (lock_right and lock_up) or not (lock_left and lock_down):
+                    if (lock_right and lock_down) or (lock_left and lock_up):
                         self.view.setCursor(Qt.SizeFDiagCursor)
 
-                    if not (lock_left and lock_right and lock_up and lock_down):
-                        annotation.start_point_mouse = QCursor.pos()
-                        self.drawing_annotation()
-                        self.timer.start(16)
+                    if (lock_right and lock_up) or (lock_left and lock_down):
+                        self.view.setCursor(Qt.SizeBDiagCursor)
+
+                    annotation.start_point_mouse = QCursor.pos()
+                    self.drawing_annotation()
+                    self.timer.start(16)
 
             if self.action == Action.MOVE:
                 if self.currentAnnotation and not self.currentMultiAnnotations:
