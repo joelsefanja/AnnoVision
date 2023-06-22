@@ -281,16 +281,16 @@ class ImageDrawer(QMainWindow):
         self.scene.clear()
         pixmap_item = self.scene.addPixmap(self.image)
 
-        # Calculate the center position of the scene
-        scene_width = self.scene.width()
-        scene_height = self.scene.height()
-        pixmap_width = pixmap_item.pixmap().width()
-        pixmap_height = pixmap_item.pixmap().height()
-        center_x = (scene_width - pixmap_width) / 2
-        center_y = (scene_height - pixmap_height) / 2
-
-        # Set the position of the pixmap item to the center
-        pixmap_item.setPos(center_x, center_y)
+        # # Calculate the center position of the scene
+        # scene_width = self.scene.width()
+        # scene_height = self.scene.height()
+        # pixmap_width = pixmap_item.pixmap().width()
+        # pixmap_height = pixmap_item.pixmap().height()
+        # center_x = (scene_width - pixmap_width) / 2
+        # center_y = (scene_height - pixmap_height) / 2
+        #
+        # # Set the position of the pixmap item to the center
+        # pixmap_item.setPos(center_x, center_y)
 
         if self.image_path and self.json_path is None:
             self.read_labels()
@@ -375,12 +375,16 @@ class ImageDrawer(QMainWindow):
 
             # Add the annotation to the class and draw the item.
             self.currentAnnotation = Annotation(QPoint(x1, y1), QPoint(x2, y2), class_id, class_name)
+            self.currentAnnotation.deselect()
 
             self.annotations.append(self.currentAnnotation)
             self.scene.addItem(self.currentAnnotation.rect)
             self.scene.addItem(self.currentAnnotation.text)
 
-    def modify_txt_file(self):
+        self.currentAnnotation = None
+        self.update_buttons()
+
+    def modify_txt_file(self, delete_all):
         label_path = self.get_label_file(self.folder_dir)
         image_width = int(self.image.width())
         image_height = int(self.image.height())
