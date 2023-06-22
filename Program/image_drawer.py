@@ -1,10 +1,10 @@
-import datetime, json, shutil, subprocess, os, atexit
+import datetime, json, shutil, subprocess, os, atexit, functools
 from pycocotools.coco import COCO
 from enum import Enum
 from annotation import Annotation
 from PyQt5.QtWidgets import QApplication, QMainWindow, QGraphicsView, QGraphicsScene, QAction, \
     QFileDialog, QPushButton, QLabel, QLineEdit, QMessageBox, QInputDialog,  QListWidget, QListWidgetItem, QVBoxLayout, QWidget
-from PyQt5.QtGui import QPixmap, QIcon, QCursor
+from PyQt5.QtGui import QPixmap, QIcon, QCursor, QPainter
 from PyQt5.QtCore import Qt, QTimer, QPoint
 
 class Action(Enum):
@@ -34,8 +34,7 @@ class ImageDrawer(QMainWindow):
         self.enable_buttons(self.open_buttons, True)
         self.create_toolbar()
         self.image_label = self.create_image_label()
-        atexit.register(self.remove_empty_files)
-
+        atexit.register(functools.partial(self.remove_empty_files, self.documents_path))
     def setup_ui(self):
         self.setWindowTitle("AnnoVision")
         self.setWindowState(Qt.WindowMaximized)
@@ -208,6 +207,7 @@ class ImageDrawer(QMainWindow):
 
             self.image_path = json_data["images"][0]["file_name"]
             self.image_path = self.image_path.replace("\\", "/")
+            self.folder_dir = os.path.dirname(self.image_path)
             self.update_image()  # Call update_image function
         elif file_path:
             self.folder_dir = os.path.dirname(file_path)
@@ -950,22 +950,45 @@ class ImageDrawer(QMainWindow):
         else:
             print("No image file selected.")
 
-    def export_image(self):
+    def export_image(self, folder_path):
         os.makedirs(self.documents_path, exist_ok=True)
         export_path = os.path.join(self.documents_path, 'Export')
         os.makedirs(export_path, exist_ok=True)
-        #pixmap = QPixmap.grab(self.image.viewport())
-        pixmap.save(export_path)
+
+        combined_image = QPixmap(self.image.size())
+        combined_image.fill(Qt.transparent)  # Set the background of the combined image to transparent
+
+        painter = QPainter(combined_image)
+        self.scene.render(painter)  # Render the scene onto the combined image
+        painter.end()  # End painting
+
+        # Get the image name from it's path
+        image_file = os.path.normpath(self.image_path)
+        image_file = image_file.replace("\\", "/")
+        if self.json_path == None:
+            image_file = image_file.split(fr"{self.folder_dir}/")[1]
+        elif self.json_path != None:
+            image_file = image_file.split(fr"{self.folder_dir}/")[1]
+        image_file = image_file.split(".")[0]
+
+        save_path = os.path.join(export_path, image_file + ".png")
+        combined_image.save(save_path)
+
+        msg_box = QMessageBox()
+        msg_box.setWindowTitle("Process completed")
+        msg_box.setText("Your image is saved at:"
+                        f"\n {save_path}")
+        msg_box.exec_()
 
     @staticmethod
-    def remove_empty_files():
-        path = "../annotations_save"
+    def remove_empty_files(documents_path):
+        path = os.path.join(documents_path, 'annotations_save')
         included_extensions = ['.txt']
         label_files = [file for file in os.listdir(path)
                        if any(file.endswith(ext) for ext in included_extensions)]
 
         for file in label_files:
-            file_path = f"../annotations_save/{file}"
+            file_path = f"{path}/{file}"
             with open(file_path, 'r') as file:
                 contents = file.read()
             if contents == "":
